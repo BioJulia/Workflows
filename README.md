@@ -2,7 +2,7 @@
 
 Reusable GitHub Actions workflows for Julia packages: checks that a pull request follows the repository's branching model, and that a release takes the right version, describes itself in the changelog, and marks its breaking changes.
 
-The checks are one script, [`checks/checks.jl`](checks/checks.jl), which a composite action, [`action.yml`](action.yml), runs at its own version, and which the reusable workflows call.
+The checks are a small Julia package, [`ReleaseChecks`](checks/src/ReleaseChecks.jl), in `checks/`, which a composite action, [`action.yml`](action.yml), runs at its own version, and which the reusable workflows call.
 A package calls a workflow by its tag, so the checks have one source of truth, and a package updates them by moving to a newer tag.
 
 ## Models
@@ -127,10 +127,13 @@ The tag `vX.Y.Z` is a second datapoint, and must agree with the registry; where 
 From the root of a package's repository:
 
 ```bash
-MODEL=gitflow BASE_BRANCH=master HEAD_REF=release/v0.2.0 julia path/to/Workflows/checks/checks.jl source
+MODEL=gitflow BASE_BRANCH=master HEAD_REF=release/v0.2.0 julia --project=path/to/Workflows/checks path/to/Workflows/checks/main.jl source
 ```
 
-The header of [`checks/checks.jl`](checks/checks.jl) lists its inputs, which are environment variables.
+The docstring of [`ReleaseChecks`](checks/src/ReleaseChecks.jl) lists its inputs, which are environment variables.
+
+The package has a file per concern: the model, settings, branch, last release and changelog types in `checks/src/`, one file per check in `checks/src/checks/`, and the listing of a package's public API, which the breaking check runs in the package's own project, in `checks/src/surface.jl`.
+Each check is a method of `check(::C, ::Settings{M})`, and the rules that differ dispatch on the model `M`, the kind `K` of a `Branch{K}`, or the source `S` of a `LastRelease{S}`.
 
 ## Developing
 

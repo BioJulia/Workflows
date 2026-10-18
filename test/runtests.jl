@@ -1,12 +1,13 @@
 # Tests of the checks
 # ===================
 #
-# Each test builds a git repository of a toy package, `Toy`, in a temporary directory, and runs `checks/checks.jl` in it, as the workflows do.
+# Each test builds a git repository of a toy package, `Toy`, in a temporary directory, and runs `checks/main.jl` in it, as the workflows do.
 # The registry is a scratch one, a directory, so that the tests need no network.
 
 using Test
 
-const SCRIPT = normpath(joinpath(@__DIR__, "..", "checks", "checks.jl"))
+const CHECKS = normpath(joinpath(@__DIR__, "..", "checks"))
+const MAIN = joinpath(CHECKS, "main.jl")
 const UUID = "6d8a9f4e-1b2c-4d3e-8f5a-0b1c2d3e4f5a"
 const URL = "https://github.com/Example/Toy.jl"
 
@@ -140,7 +141,7 @@ function check(directory, name; variables...)
         environment[string(key)] = string(value)
     end
     output = IOBuffer()
-    command = Cmd(addenv(`$(Base.julia_cmd()) --startup-file=no $(SCRIPT) $(name)`, environment); dir = directory, ignorestatus = true)
+    command = Cmd(addenv(`$(Base.julia_cmd()) --startup-file=no --project=$(CHECKS) $(MAIN) $(name)`, environment); dir = directory, ignorestatus = true)
     process = run(pipeline(command; stdout = output, stderr = output))
     return (code = process.exitcode, output = String(take!(output)))
 end
