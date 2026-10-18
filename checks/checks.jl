@@ -12,6 +12,8 @@
 # The last release is the main branch's version, at the commit that the registry records for it, cross-checked with its tag `vX.Y.Z`; gitflow compares with the main branch itself, which holds only releases.
 # Git doesn't record which branch a branch was made from, only its commits, so the rules about origins look at the commits.
 #
+# Each check is a method of `check(::C, ::Settings{M})`; the rules that differ between models dispatch on the model `M`, those that differ between kinds of branch on the kind `K` of a `Branch{K}`, and those that differ by where the last release was found on the source `S` of a `LastRelease{S}`.
+#
 # Run from the root of the package's repository with `julia checks.jl source|version|changelog|breaking|entry|release`.
 # Inputs are environment variables, so that branch names never reach a shell, and an empty one counts as missing:
 # - `MODEL`, `gitflow`, `oneflow` or `trunk`, `gitflow` unless given;
@@ -30,25 +32,73 @@ using Pkg
 using TOML
 using UUIDs
 
-const ROOT = pwd()
+# Models
+# ------
+
+abstract type Model end
+
+"A main branch of releases and a develop branch of unreleased work."
+struct Gitflow <: Model end
+
+"One main branch, from which release and hotfix branches are released at their last commit, and merged back."
+struct OneFlow <: Model end
+
+"One main branch, on which a release is a commit that changes the version."
+struct Trunk <: Model end
+
+const MODELS = Dict("gitflow" => Gitflow(), "oneflow" => OneFlow(), "trunk" => Trunk())
+
+title(model::Model) = string(nameof(typeof(model)))
+
+# Settings
+# --------
+
+"The inputs of a run of the checks under the model `M`, and what the run has found, such as the registry and the last release."
+struct Settings{M <: Model}
+    model::M
+    root::String
+    main_branch::String
+    develop_branch::String
+    head_ref::String
+    head_sha::String
+    base_branch::String
+    base_ref::String
+    develop_ref::String
+    skip_label::String
+    skip_changelog::Bool
+    check_links::Bool
+    registry::String
+    found::Dict{Symbol, Any}
+end
 
 # An input, or `default` where it's missing or empty, as GitHub Actions passes an input that it has no value for.
-input(name, default) = (value = get(ENV, name, ""); isempty(value) ? default : value)
+input(environment, name, default) = (value = get(environment, name, ""); isempty(value) ? default : value)
 
-const MODEL = input("MODEL", "gitflow")
-const MAIN_BRANCH = input("MAIN_BRANCH", "master")
-const DEVELOP_BRANCH = input("DEVELOP_BRANCH", "develop")
-const HEAD_REF = input("HEAD_REF", "")
-const HEAD_SHA = input("HEAD_SHA", "HEAD")
-const BASE_BRANCH = input("BASE_BRANCH", "")
-const BASE_REF = input("BASE_REF", "origin/$(MAIN_BRANCH)")
-const DEVELOP_REF = input("DEVELOP_REF", "origin/$(DEVELOP_BRANCH)")
-const SKIP_LABEL = input("SKIP_LABEL", "skip changelog")
-const SKIP_CHANGELOG = lowercase(input("SKIP_CHANGELOG", "false")) == "true"
-const CHECK_LINKS = lowercase(input("CHECK_LINKS", "true")) == "true"
-const REGISTRY = input("REGISTRY", "General")
+function Settings(environment = ENV; root = pwd())
+    main_branch = input(environment, "MAIN_BRANCH", "master")
+    develop_branch = input(environment, "DEVELOP_BRANCH", "develop")
+    return Settings(
+        MODELS[input(environment, "MODEL", "gitflow")],
+        root,
+        main_branch,
+        develop_branch,
+        input(environment, "HEAD_REF", ""),
+        input(environment, "HEAD_SHA", "HEAD"),
+        input(environment, "BASE_BRANCH", ""),
+        input(environment, "BASE_REF", "origin/$(main_branch)"),
+        input(environment, "DEVELOP_REF", "origin/$(develop_branch)"),
+        input(environment, "SKIP_LABEL", "skip changelog"),
+        lowercase(input(environment, "SKIP_CHANGELOG", "false")) == "true",
+        lowercase(input(environment, "CHECK_LINKS", "true")) == "true",
+        input(environment, "REGISTRY", "General"),
+        Dict{Symbol, Any}(),
+    )
+end
 
-const MODELS = Dict("gitflow" => "Gitflow", "oneflow" => "OneFlow", "trunk" => "Trunk")
+# What `find` gives, found once per run.
+found!(find, settings::Settings, key::Symbol) = get!(find, settings.found, key)
+
+head_label(settings::Settings) = isempty(settings.head_ref) ? settings.head_sha : settings.head_ref
 
 # Reporting
 # ---------
@@ -75,31 +125,33 @@ end
 # ---
 
 # The output of `git arguments...` in the repository, without its last newline, or `nothing` where git fails.
-function git(arguments...)
+function git(settings::Settings, arguments...)
     output = IOBuffer()
-    process = run(pipeline(ignorestatus(`git -C $(ROOT) $(arguments)`); stdout = output, stderr = devnull))
+    process = run(pipeline(ignorestatus(`git -C $(settings.root) $(arguments)`); stdout = output, stderr = devnull))
     return success(process) ? chomp(String(take!(output))) : nothing
 end
 
 # The contents of `path` at `ref`, or `nothing` where `ref` has no such file, or doesn't exist.
-file_at(ref, path) = git("show", "$(ref):$(path)")
+file_at(settings::Settings, ref, path) = git(settings, "show", "$(ref):$(path)")
 
-base_file(path) = file_at(BASE_REF, path)
+base_file(settings::Settings, path) = file_at(settings, settings.base_ref, path)
 
-has_ref(ref) = git("rev-parse", "--verify", "--quiet", "$(ref)^{commit}") !== nothing
+has_ref(settings::Settings, ref) = git(settings, "rev-parse", "--verify", "--quiet", "$(ref)^{commit}") !== nothing
 
-has_base() = has_ref(BASE_REF)
+has_base(settings::Settings) = has_ref(settings, settings.base_ref)
+
+has_tag(settings::Settings, tag) = has_ref(settings, "refs/tags/$(tag)")
 
 # The commit where `a` and `b` last met, or `nothing` where they never did.
-merge_base(a, b) = git("merge-base", a, b)
+merge_base(settings::Settings, a, b) = git(settings, "merge-base", a, b)
 
-is_ancestor(a, b) = git("merge-base", "--is-ancestor", a, b) !== nothing
+is_ancestor(settings::Settings, a, b) = git(settings, "merge-base", "--is-ancestor", a, b) !== nothing
 
-tree_of(ref) = git("rev-parse", "$(ref)^{tree}")
+tree_of(settings::Settings, ref) = git(settings, "rev-parse", "$(ref)^{tree}")
 
 # The first commit of any branch or tag whose tree is `tree`, or `nothing`.
-function commit_with_tree(tree)
-    for line in split(something(git("log", "--all", "--format=%H %T"), ""), '\n')
+function commit_with_tree(settings::Settings, tree)
+    for line in split(something(git(settings, "log", "--all", "--format=%H %T"), ""), '\n')
         commit, commit_tree = (split(line, ' ')..., "", "")
         commit_tree == tree && return String(commit)
     end
@@ -109,48 +161,91 @@ end
 # The package
 # -----------
 
-head_project() = TOML.parsefile(joinpath(ROOT, "Project.toml"))
+head_project(settings::Settings) = TOML.parsefile(joinpath(settings.root, "Project.toml"))
 
-head_version() = VersionNumber(head_project()["version"])
+head_version(settings::Settings) = VersionNumber(head_project(settings)["version"])
 
-function base_version()
-    project = base_file("Project.toml")
+function base_version(settings::Settings)
+    project = base_file(settings, "Project.toml")
     project === nothing && return nothing
     version = get(TOML.parse(project), "version", nothing)
     return version === nothing ? nothing : VersionNumber(version)
 end
 
+# Branches
+# --------
+
+abstract type Kind end
+
+"A branch that releases the next version of the unreleased work."
+struct Release <: Kind end
+
+"A branch that releases a fix to the last release."
+struct Hotfix <: Kind end
+
+"A branch of unreleased work."
+struct Feature <: Kind end
+
+"A branch that brings the main branch back into develop: the main branch itself, or a `back-merge/vX.Y.Z` branch at it."
+struct BackMerge <: Kind end
+
+"The branch that a pull request comes from, of the kind `K`, with the version that its name gives, if any."
+struct Branch{K <: Kind}
+    name::String
+    version::Union{VersionNumber, Nothing}
+end
+
+Branch{K}(name) where {K} = Branch{K}(name, nothing)
+
+const ReleaseOrHotfix = Union{Branch{Release}, Branch{Hotfix}}
+
+kind_name(::Branch) = "release"
+kind_name(::Branch{Hotfix}) = "hotfix"
+
+# The branch of the pull request, from its name.
+function head_branch(settings::Settings)
+    name = settings.head_ref
+    m = match(r"^(release|hotfix)/v?(\d+\.\d+\.\d+\S*)$", name)
+    m === nothing || return (m[1] == "hotfix" ? Branch{Hotfix} : Branch{Release})(name, tryparse(VersionNumber, m[2]))
+    startswith(name, "hotfix/") && return Branch{Hotfix}(name)
+    startswith(name, "release/") && return Branch{Release}(name)
+    (name == settings.main_branch || startswith(name, "back-merge/")) && return Branch{BackMerge}(name)
+    return Branch{Feature}(name)
+end
+
+# Under trunk, a pull request that changes the version is a release, whatever its branch's name.
+head_branch(settings::Settings{Trunk}) = (is_release(settings) ? Branch{Release} : Branch{Feature})(settings.head_ref)
+
+# Whether the pull request is a release, which moves the changelog's entries rather than adding one.
+is_release(settings::Settings) = head_branch(settings) isa ReleaseOrHotfix
+is_release(settings::Settings{Trunk}) = found!(() -> base_version(settings) != head_version(settings), settings, :is_release)
+
 # The registry
 # ------------
 
-const REGISTRY_INSTANCE = Ref{Any}(missing)
+# The registry `settings.registry`, updated, or `nothing` where it can't be had; a path is read as it is, as the tests do.
+registry(settings::Settings) = found!(() -> open_registry(settings.registry), settings, :registry)
 
-# The registry `REGISTRY`, updated, or `nothing` where it can't be had; a path is read as it is, as the tests do.
-function registry()
-    REGISTRY_INSTANCE[] === missing || return REGISTRY_INSTANCE[]
-    REGISTRY_INSTANCE[] = try
-        if isdir(REGISTRY)
-            Pkg.Registry.RegistryInstance(REGISTRY)
-        else
-            installed = any(instance -> instance.name == REGISTRY, Pkg.Registry.reachable_registries())
-            installed ? Pkg.Registry.update(REGISTRY; io = devnull) : Pkg.Registry.add(REGISTRY; io = devnull)
-            only(filter(instance -> instance.name == REGISTRY, Pkg.Registry.reachable_registries()))
-        end
+function open_registry(name)
+    try
+        isdir(name) && return Pkg.Registry.RegistryInstance(name)
+        installed = any(instance -> instance.name == name, Pkg.Registry.reachable_registries())
+        installed ? Pkg.Registry.update(name; io = devnull) : Pkg.Registry.add(name; io = devnull)
+        return only(filter(instance -> instance.name == name, Pkg.Registry.reachable_registries()))
     catch exception
-        note("The registry $(REGISTRY) couldn't be read, so releases are found by their tags: $(sprint(showerror, exception))")
-        nothing
+        note("The registry $(name) couldn't be read, so releases are found by their tags: $(sprint(showerror, exception))")
+        return nothing
     end
-    return REGISTRY_INSTANCE[]
 end
 
 # The registry's name, for messages.
-registry_name() = (instance = registry(); instance === nothing ? REGISTRY : instance.name)
+registry_name(settings::Settings) = (instance = registry(settings); instance === nothing ? settings.registry : instance.name)
 
 # The tree of the package's `version` that the registry records, or `nothing` where it records none.
-function registered_tree(version)
-    instance = registry()
+function registered_tree(settings::Settings, version)
+    instance = registry(settings)
     instance === nothing && return nothing
-    entry = get(instance, UUID(head_project()["uuid"]), nothing)
+    entry = get(instance, UUID(head_project(settings)["uuid"]), nothing)
     entry === nothing && return nothing
     # Pkg's registry API changed in Julia 1.13, which passes the registry with the entry.
     info = applicable(Pkg.Registry.registry_info, instance, entry) ? Pkg.Registry.registry_info(instance, entry) : Pkg.Registry.registry_info(entry)
@@ -161,111 +256,155 @@ end
 # The last release
 # ----------------
 
-const RELEASE_BASE = Ref{Any}(missing)
+abstract type Source end
 
-# The last release, as its version and the commit to compare with: the main branch's version, at the commit whose tree the registry records for it, which must agree with its tag; else at its tag, or at the main branch, for a package not yet registered.
-# Gitflow compares with the main branch, which holds only releases.
-function release_base()
-    RELEASE_BASE[] === missing || return RELEASE_BASE[]
-    RELEASE_BASE[] = has_base() ? find_release_base() : nothing
-    return RELEASE_BASE[]
+"A release whose commit the registry records."
+struct Registered <: Source end
+
+"A release that only its tag records."
+struct Tagged <: Source end
+
+"A release that is the main branch itself: under gitflow, or before a package is registered or tagged."
+struct MainBranch <: Source end
+
+"The last release, found from the source `S`: its version, and the commit to compare with."
+struct LastRelease{S <: Source}
+    version::VersionNumber
+    ref::String
 end
 
-function find_release_base()
-    version = base_version()
-    version === nothing && return nothing
-    MODEL == "gitflow" && return (; version, ref = BASE_REF, label = BASE_REF)
+label(release::LastRelease) = "the release $(release.version)"
+label(release::LastRelease{MainBranch}) = release.ref
+
+# The last release, or `nothing` before the first.
+last_release(settings::Settings) = found!(settings, :last_release) do
+    has_base(settings) || return nothing
+    version = base_version(settings)
+    version === nothing ? nothing : find_last_release(settings, version)
+end
+
+# Gitflow compares with the main branch, which holds only releases.
+find_last_release(settings::Settings{Gitflow}, version) = LastRelease{MainBranch}(version, settings.base_ref)
+
+# Otherwise, the main branch's version, at the commit whose tree the registry records for it, which must agree with its tag; else at its tag, or at the main branch, for a package not yet registered.
+function find_last_release(settings::Settings, version)
     tag = "v$(version)"
-    tagged = has_ref("refs/tags/$(tag)")
-    tree = registered_tree(version)
+    tagged = has_tag(settings, tag)
+    tree = registered_tree(settings, version)
+    name = registry_name(settings)
     if tree !== nothing
-        commit = commit_with_tree(tree)
+        commit = commit_with_tree(settings, tree)
         if commit === nothing
-            failure("Release", "$(registry_name()) records the tree $(tree) for $(version), but no branch or tag has a commit with it; fetch the whole history, or tag the release.")
+            failure("Release", "$(name) records the tree $(tree) for $(version), but no branch or tag has a commit with it; fetch the whole history, or tag the release.")
             return nothing
         end
-        if tagged && tree_of(tag) != tree
-            failure("Release", "The tag $(tag) isn't the release of $(version) that $(registry_name()) records: its tree is $(tree_of(tag)), but the registered tree is $(tree), of the commit $(commit); move the tag.")
+        if tagged && tree_of(settings, tag) != tree
+            failure("Release", "The tag $(tag) isn't the release of $(version) that $(name) records: its tree is $(tree_of(settings, tag)), but the registered tree is $(tree), of the commit $(commit); move the tag.")
         end
-        println("The last release, $(version), is the commit $(first(commit, 7)), which $(registry_name()) records$(tagged ? " and $(tag) tags" : "").")
-        return (; version, ref = commit, label = "the release $(version)")
+        println("The last release, $(version), is the commit $(first(commit, 7)), which $(name) records$(tagged ? " and $(tag) tags" : "").")
+        return LastRelease{Registered}(version, commit)
     elseif tagged
-        note("$(registry_name()) doesn't record $(version), so the last release is the tag $(tag).")
-        return (; version, ref = tag, label = "the release $(version)")
+        note("$(name) doesn't record $(version), so the last release is the tag $(tag).")
+        return LastRelease{Tagged}(version, tag)
     else
-        note("$(registry_name()) doesn't record $(version), and there's no tag $(tag), so the last release is $(BASE_REF).")
-        return (; version, ref = BASE_REF, label = BASE_REF)
+        note("$(name) doesn't record $(version), and there's no tag $(tag), so the last release is $(settings.base_ref).")
+        return LastRelease{MainBranch}(version, settings.base_ref)
     end
 end
+
+# The checks
+# ----------
+
+abstract type Check end
+
+struct SourceCheck <: Check end
+struct VersionCheck <: Check end
+struct ChangelogCheck <: Check end
+struct BreakingCheck <: Check end
+struct EntryCheck <: Check end
+struct ReleaseCheck <: Check end
+
+const CHECKS = Dict(
+    "source" => SourceCheck(), "version" => VersionCheck(), "changelog" => ChangelogCheck(),
+    "breaking" => BreakingCheck(), "entry" => EntryCheck(), "release" => ReleaseCheck(),
+)
 
 # Source branch
 # -------------
 
-release_or_hotfix(ref) = startswith(ref, "release/") || startswith(ref, "hotfix/")
-
-# Whether `ref` brings the main branch back into develop, carrying released changes rather than new ones: the main branch itself, or a `back-merge/vX.Y.Z` branch at it, which the back-merge workflow opens.
-back_merge(ref) = ref == MAIN_BRANCH || startswith(ref, "back-merge/")
-
-# A hotfix branches from what's released, so the point where it last met the branch of unreleased work, `unreleased`, is already released; a release branches from that branch, so that point isn't released yet.
-# The head commit is compared, not the merge commit that GitHub Actions checks out, and with this repository's branches, so a fork's own branches don't matter.
-function check_origin(unreleased, unreleased_name, released, released_name)
-    if !has_ref(unreleased)
-        note("There's no $(unreleased), so where $(HEAD_REF) came from isn't checked.")
-        return
-    end
-    fork = merge_base(HEAD_SHA, unreleased)
-    is_released = fork === nothing || is_ancestor(fork, released)
-    if startswith(HEAD_REF, "hotfix/")
-        if is_released
-            println("$(HEAD_REF) carries no unreleased commit of $(unreleased_name).")
-        else
-            commits = split(something(git("log", "--oneline", "-n", "5", "$(released)..$(fork)"), ""), '\n')
-            failure(MODELS[MODEL], "The hotfix $(HEAD_REF) carries unreleased commits of $(unreleased_name), such as:\n$(join(commits, '\n'))\nBranch a hotfix from $(released_name).")
-        end
-    elseif is_released
-        failure(MODELS[MODEL], "The release $(HEAD_REF) carries none of the unreleased commits of $(unreleased_name); branch a release from $(unreleased_name).")
+function check(::SourceCheck, settings::Settings)
+    if settings.base_branch == settings.main_branch
+        into_main(settings, head_branch(settings))
+    elseif settings.base_branch == settings.develop_branch
+        into_develop(settings, head_branch(settings))
     else
-        println("$(HEAD_REF) carries the unreleased commits of $(unreleased_name).")
+        uncovered(settings)
     end
     return
 end
 
-function check_source()
-    if MODEL == "gitflow"
-        # The main branch takes merges only from release and hotfix branches; develop takes them from any other branch, and release and hotfix branches reach it through the main branch.
-        if BASE_BRANCH == MAIN_BRANCH
-            if release_or_hotfix(HEAD_REF)
-                println("$(MAIN_BRANCH) takes the merge of $(HEAD_REF), a release or hotfix branch.")
-                check_origin(DEVELOP_REF, DEVELOP_BRANCH, BASE_REF, MAIN_BRANCH)
-            else
-                failure("Gitflow", "$(MAIN_BRANCH) takes merges only from release/* and hotfix/* branches, as gitflow does, not from $(HEAD_REF); merge features into $(DEVELOP_BRANCH).")
-            end
-        elseif BASE_BRANCH == DEVELOP_BRANCH
-            if release_or_hotfix(HEAD_REF)
-                failure("Gitflow", "$(DEVELOP_BRANCH) doesn't take merges from release/* and hotfix/* branches, such as $(HEAD_REF); merge it into $(MAIN_BRANCH), and then merge $(MAIN_BRANCH) into $(DEVELOP_BRANCH).")
-            else
-                println("$(DEVELOP_BRANCH) takes the merge of $(HEAD_REF).")
-            end
-        else
-            note("The Gitflow checks don't cover pull requests into $(isempty(BASE_BRANCH) ? "an unnamed branch; set BASE_BRANCH" : BASE_BRANCH).")
-        end
-    elseif MODEL == "oneflow"
-        # The main branch takes any branch; a hotfix branches from the last release's tag, and a release carries the main branch's work since then.
-        if BASE_BRANCH != MAIN_BRANCH
-            note("The OneFlow checks don't cover pull requests into $(isempty(BASE_BRANCH) ? "an unnamed branch; set BASE_BRANCH" : BASE_BRANCH).")
-        elseif release_or_hotfix(HEAD_REF)
-            base = release_base()
-            if base === nothing || base.ref == BASE_REF
-                note("There's no earlier release, so where $(HEAD_REF) came from isn't checked.")
-            else
-                println("$(MAIN_BRANCH) takes the merge of $(HEAD_REF), a release or hotfix branch.")
-                check_origin(BASE_REF, MAIN_BRANCH, base.ref, "the release $(base.version), v$(base.version)")
-            end
-        else
-            println("$(MAIN_BRANCH) takes the merge of $(HEAD_REF).")
-        end
+check(::SourceCheck, ::Settings{Trunk}) = note("The trunk model has no rules about source branches.")
+
+uncovered(settings::Settings) = note("The $(title(settings.model)) checks don't cover pull requests into $(isempty(settings.base_branch) ? "an unnamed branch; set BASE_BRANCH" : settings.base_branch).")
+
+# Only gitflow has a develop branch.
+into_develop(settings::Settings, ::Branch) = uncovered(settings)
+
+# Gitflow: the main branch takes merges only from release and hotfix branches; develop takes them from any other branch, and release and hotfix branches reach it through the main branch.
+function into_main(settings::Settings{Gitflow}, branch::ReleaseOrHotfix)
+    println("$(settings.main_branch) takes the merge of $(branch.name), a release or hotfix branch.")
+    check_origin(settings, branch, settings.develop_ref, settings.develop_branch, settings.base_ref, settings.main_branch)
+    return
+end
+
+into_main(settings::Settings{Gitflow}, branch::Branch) = failure("Gitflow", "$(settings.main_branch) takes merges only from release/* and hotfix/* branches, as gitflow does, not from $(branch.name); merge features into $(settings.develop_branch).")
+
+into_develop(settings::Settings{Gitflow}, branch::ReleaseOrHotfix) = failure("Gitflow", "$(settings.develop_branch) doesn't take merges from release/* and hotfix/* branches, such as $(branch.name); merge it into $(settings.main_branch), and then merge $(settings.main_branch) into $(settings.develop_branch).")
+
+into_develop(settings::Settings{Gitflow}, branch::Branch) = println("$(settings.develop_branch) takes the merge of $(branch.name).")
+
+# OneFlow: the main branch takes any branch; a hotfix branches from the last release's tag, and a release carries the main branch's work since then.
+function into_main(settings::Settings{OneFlow}, branch::ReleaseOrHotfix)
+    release = last_release(settings)
+    if release === nothing || release isa LastRelease{MainBranch}
+        note("There's no earlier release, so where $(branch.name) came from isn't checked.")
     else
-        note("The trunk model has no rules about source branches.")
+        println("$(settings.main_branch) takes the merge of $(branch.name), a release or hotfix branch.")
+        check_origin(settings, branch, settings.base_ref, settings.main_branch, release.ref, "the release $(release.version), v$(release.version)")
+    end
+    return
+end
+
+into_main(settings::Settings{OneFlow}, branch::Branch) = println("$(settings.main_branch) takes the merge of $(branch.name).")
+
+# A hotfix branches from what's released, so the point where it last met the branch of unreleased work, `unreleased`, is already released; a release branches from that branch, so that point isn't released yet.
+# The head commit is compared, not the merge commit that GitHub Actions checks out, and with this repository's branches, so a fork's own branches don't matter.
+function check_origin(settings::Settings, branch::ReleaseOrHotfix, unreleased, unreleased_name, released, released_name)
+    if !has_ref(settings, unreleased)
+        note("There's no $(unreleased), so where $(branch.name) came from isn't checked.")
+        return
+    end
+    fork = merge_base(settings, settings.head_sha, unreleased)
+    is_released = fork === nothing || is_ancestor(settings, fork, released)
+    origin(settings, branch, is_released, fork, unreleased_name, released, released_name)
+    return
+end
+
+function origin(settings::Settings, branch::Branch{Hotfix}, is_released, fork, unreleased_name, released, released_name)
+    if is_released
+        println("$(branch.name) carries no unreleased commit of $(unreleased_name).")
+    else
+        commits = split(something(git(settings, "log", "--oneline", "-n", "5", "$(released)..$(fork)"), ""), '\n')
+        failure(title(settings.model), "The hotfix $(branch.name) carries unreleased commits of $(unreleased_name), such as:\n$(join(commits, '\n'))\nBranch a hotfix from $(released_name).")
+    end
+    return
+end
+
+function origin(settings::Settings, branch::Branch{Release}, is_released, fork, unreleased_name, released, released_name)
+    if is_released
+        failure(title(settings.model), "The release $(branch.name) carries none of the unreleased commits of $(unreleased_name); branch a release from $(unreleased_name).")
+    else
+        println("$(branch.name) carries the unreleased commits of $(unreleased_name).")
     end
     return
 end
@@ -273,56 +412,68 @@ end
 # Versions
 # --------
 
-# The kind of branch, `"release"` or `"hotfix"`, and the version that its name gives, or `nothing` where it gives none.
-function branch_version(ref)
-    m = match(r"^(release|hotfix)/v?(\d+\.\d+\.\d+\S*)$", ref)
-    m === nothing && return (startswith(ref, "hotfix/") ? "hotfix" : "release", nothing)
-    return (m[1], tryparse(VersionNumber, m[2]))
-end
-
-# The kind of the release, `"hotfix"` or `"release"`; the trunk model has only releases.
-release_kind() = MODEL == "trunk" ? "release" : first(branch_version(HEAD_REF))
-
 next_patch(v) = VersionNumber(v.major, v.minor, v.patch + 1)
 next_minor(v) = VersionNumber(v.major, v.minor + 1, 0)
 next_major(v) = VersionNumber(v.major + 1, 0, 0)
 
-# The steps that a version may take from `base`: a breaking change takes the next major version, or below 1.0 the next minor version, which Julia's compat treats as breaking.
+# The steps that a version may take from `base`.
+single_steps(base) = (next_patch(base), next_minor(base), next_major(base))
+
+# The steps that a breaking change may take from `base`: the next major version, or below 1.0 the next minor version, which Julia's compat treats as breaking.
 breaking_steps(base) = base.major == 0 ? (next_minor(base), next_major(base)) : (next_major(base),)
 
-function check_version()
-    head = head_version()
-    base = base_version()
-    println("Version: $(head) on $(isempty(HEAD_REF) ? HEAD_SHA : HEAD_REF); $(base === nothing ? "no version" : base) on $(BASE_REF).")
-    isempty(head.prerelease) && isempty(head.build) || failure("Version", "The version $(head) has a prerelease or build suffix; a release has neither.")
+# A release or hotfix branch's name gives its version; trunk names no versions.
+check_name(::Settings, branch::Branch, head) = unnamed(branch, head)
 
-    kind = release_kind()
-    if MODEL != "trunk"
-        _, named = branch_version(HEAD_REF)
-        if named === nothing
-            failure("Version", "The branch $(HEAD_REF) doesn't name a version; name it $(kind)/v$(head), after the version in Project.toml.")
-        elseif named != head
-            failure("Version", "The branch $(HEAD_REF) names $(named), but Project.toml has $(head); they must agree.")
-        end
+function check_name(::Settings, branch::ReleaseOrHotfix, head)
+    if branch.version === nothing
+        unnamed(branch, head)
+    elseif branch.version != head
+        failure("Version", "The branch $(branch.name) names $(branch.version), but Project.toml has $(head); they must agree.")
     end
+    return
+end
+
+check_name(::Settings{Trunk}, ::Branch, head) = nothing
+check_name(::Settings{Trunk}, ::ReleaseOrHotfix, head) = nothing
+
+unnamed(branch::Branch, head) = failure("Version", "The branch $(branch.name) doesn't name a version; name it $(kind_name(branch))/v$(head), after the version in Project.toml.")
+
+# A version takes a single step up from the last release's, and a hotfix the next patch.
+function check_step(::Branch, head, base)
+    head in single_steps(base) || not_a_step(head, base)
+    return
+end
+
+function check_step(::Branch{Hotfix}, head, base)
+    head in single_steps(base) || return not_a_step(head, base)
+    head == next_patch(base) || failure("Version", "A hotfix releases the next patch, $(next_patch(base)), not $(head).")
+    return
+end
+
+not_a_step(head, base) = failure("Version", "The version $(head) isn't a single step up from $(base); the next is $(join(single_steps(base), ", ", " or ")).")
+
+function check(::VersionCheck, settings::Settings)
+    head = head_version(settings)
+    base = base_version(settings)
+    println("Version: $(head) on $(head_label(settings)); $(base === nothing ? "no version" : base) on $(settings.base_ref).")
+    isempty(head.prerelease) && isempty(head.build) || failure("Version", "The version $(head) has a prerelease or build suffix; a release has neither.")
+    branch = head_branch(settings)
+    check_name(settings, branch, head)
 
     # A release may be registered and tagged before it merges, as OneFlow does, but only at this commit.
-    head_tree = tree_of(HEAD_SHA)
-    registered = registered_tree(head)
-    registered === nothing || registered == head_tree || failure("Version", "$(registry_name()) already records $(head), with another tree; a release takes a new version.")
+    head_tree = tree_of(settings, settings.head_sha)
+    registered = registered_tree(settings, head)
+    registered === nothing || registered == head_tree || failure("Version", "$(registry_name(settings)) already records $(head), with another tree; a release takes a new version.")
     tag = "v$(head)"
-    has_ref("refs/tags/$(tag)") && tree_of(tag) != head_tree && failure("Version", "The version $(head) is already tagged, $(tag), at another commit; a release takes a new version.")
+    has_tag(settings, tag) && tree_of(settings, tag) != head_tree && failure("Version", "The version $(head) is already tagged, $(tag), at another commit; a release takes a new version.")
 
     if base === nothing
-        note("$(BASE_REF) has no version, so $(head) is the first release.")
+        note("$(settings.base_ref) has no version, so $(head) is the first release.")
     else
-        MODEL == "gitflow" || release_base()
-        steps = (next_patch(base), next_minor(base), next_major(base))
-        if !(head in steps)
-            failure("Version", "The version $(head) isn't a single step up from $(base); the next is $(join(steps, ", ", " or ")).")
-        elseif kind == "hotfix" && head != next_patch(base)
-            failure("Version", "A hotfix releases the next patch, $(next_patch(base)), not $(head).")
-        end
+        # Finding the last release checks that its tag agrees with the registry.
+        last_release(settings)
+        check_step(branch, head, base)
     end
     return
 end
@@ -330,34 +481,69 @@ end
 # Changelog
 # ---------
 
+abstract type Heading end
+
+"The heading of the unreleased changes, `## [Unreleased]` or `## UNRELEASED`."
+struct Unreleased <: Heading end
+
+"The heading of a released version, such as `## [0.2.0] - 2026-10-19`."
+struct Released <: Heading
+    version::VersionNumber
+end
+
+"Any other heading of the second level."
+struct Other <: Heading end
+
+"A section of a changelog, under a heading of the kind `H`, and its lines."
+struct Section{H <: Heading}
+    heading::H
+    lines::Vector{String}
+end
+
+Section(heading::Heading) = Section(heading, String[])
+
 const UNRELEASED = r"^##\s+(UNRELEASED|\[Unreleased\])\s*$"i
 const RELEASED = r"^##\s+\[?v?(\d+\.\d+\.\d+[^\]\s]*)\]?"
 
-# The sections of a changelog, in order: each heading's version, `:unreleased`, or `nothing`, and its lines.
+function heading(line)
+    occursin(UNRELEASED, line) && return Unreleased()
+    m = match(RELEASED, line)
+    version = m === nothing ? nothing : tryparse(VersionNumber, m[1])
+    return version === nothing ? Other() : Released(version)
+end
+
+# The sections of a changelog, in order.
 function sections(text)
-    result = Pair{Any, Vector{String}}[]
+    result = Section[]
     for line in split(text, '\n')
         if startswith(line, "## ")
-            m = match(RELEASED, line)
-            key = occursin(UNRELEASED, line) ? :unreleased : m === nothing ? nothing : tryparse(VersionNumber, m[1])
-            push!(result, key => String[])
+            push!(result, Section(heading(line)))
         elseif !isempty(result)
-            push!(last(result[end]), line)
+            push!(last(result).lines, line)
         end
     end
     return result
 end
 
+is_version(::Section, version) = false
+is_version(section::Section{Released}, version) = section.heading.version == version
+
+versions(sections) = VersionNumber[section.heading.version for section in sections if section isa Section{Released}]
+
+unreleased_index(sections) = findfirst(section -> section isa Section{Unreleased}, sections)
+
 # An entry is an item of a list, with any of Markdown's markers.
 is_entry(line) = occursin(r"^[-*+]\s", line)
 
-entries(lines) = count(is_entry, lines)
+entries(section::Section) = filter(is_entry, section.lines)
 
-# The entries of the subsection `title`, such as `### Breaking`, in `lines`.
-function subsection_entries(lines, title)
+unreleased_entries(sections) = (index = unreleased_index(sections); index === nothing ? String[] : entries(sections[index]))
+
+# The entries of the subsection `title`, such as `### Breaking`, of `section`.
+function subsection_entries(section::Section, title)
     inside = false
     found = 0
-    for line in lines
+    for line in section.lines
         if startswith(line, "### ")
             inside = lowercase(strip(line[5:end])) == lowercase(title)
         elseif inside && is_entry(line)
@@ -367,17 +553,17 @@ function subsection_entries(lines, title)
     return found
 end
 
-function head_changelog()
-    path = joinpath(ROOT, "CHANGELOG.md")
+function head_changelog(settings::Settings)
+    path = joinpath(settings.root, "CHANGELOG.md")
     isfile(path) || (failure("Changelog", "There's no CHANGELOG.md."); return nothing)
     return read(path, String)
 end
 
 # The URL of the repository on GitHub, from `GITHUB_REPOSITORY` in GitHub Actions, or from the `origin` remote locally; `nothing` where neither gives one.
-function repository_url()
+function repository_url(settings::Settings)
     repository = get(ENV, "GITHUB_REPOSITORY", "")
     if isempty(repository)
-        remote = something(git("remote", "get-url", "origin"), "")
+        remote = something(git(settings, "remote", "get-url", "origin"), "")
         m = match(r"github\.com[:/]([^/]+/[^/]+?)(?:\.git)?/?$", remote)
         m === nothing && return nothing
         repository = m[1]
@@ -406,24 +592,24 @@ end
 
 # Each version's heading links to the comparison of its tag with the tag of the version below it, or for the oldest version to its own tag or a comparison with an earlier one, and the unreleased heading, `## [Unreleased]`, to the comparison of the newest version's tag with `HEAD`.
 # Tags are spelled `vX.Y.Z`, as TagBot spells them.
-function check_links(text, parsed)
-    url = repository_url()
+function check_links(settings::Settings, text, parsed)
+    url = repository_url(settings)
     url === nothing && (failure("Changelog", "The repository's URL is unknown, so the links of CHANGELOG.md can't be checked; set `GITHUB_REPOSITORY`, such as `owner/Package.jl`."); return)
     definitions = links(text)
-    versions = VersionNumber[key for (key, _) in parsed if key isa VersionNumber]
-    for (index, version) in enumerate(versions)
-        expected = index == length(versions) ? "$(url)/releases/tag/v$(version)" : "$(url)/compare/v$(versions[index + 1])...v$(version)"
+    released = versions(parsed)
+    for (index, version) in enumerate(released)
+        expected = index == length(released) ? "$(url)/releases/tag/v$(version)" : "$(url)/compare/v$(released[index + 1])...v$(version)"
         actual = get(definitions, string(version), get(definitions, "v$(version)", nothing))
         if actual === nothing
             failure("Changelog", "CHANGELOG.md has no link for $(version); add `[$(version)]: $(expected)` at its end.")
-        elseif actual != expected && !(index == length(versions) && from_earlier(actual, url, version))
+        elseif actual != expected && !(index == length(released) && from_earlier(actual, url, version))
             failure("Changelog", "The link for $(version) in CHANGELOG.md is $(actual), but it should be $(expected).")
         end
     end
-    if any(section -> first(section) === :unreleased, parsed)
+    if unreleased_index(parsed) !== nothing
         occursin(r"^##\s+\[Unreleased\]\s*$"im, text) || failure("Changelog", "Head the unreleased section of CHANGELOG.md `## [Unreleased]`, so that it links to the unreleased changes.")
-        if !isempty(versions)
-            expected = "$(url)/compare/v$(first(versions))...HEAD"
+        if !isempty(released)
+            expected = "$(url)/compare/v$(first(released))...HEAD"
             actual = get(definitions, "unreleased", nothing)
             if actual === nothing
                 failure("Changelog", "CHANGELOG.md has no link for the unreleased changes; add `[Unreleased]: $(expected)` at its end.")
@@ -435,75 +621,66 @@ function check_links(text, parsed)
     return
 end
 
-function check_changelog()
-    version = head_version()
-    text = head_changelog()
+function check(::ChangelogCheck, settings::Settings)
+    version = head_version(settings)
+    text = head_changelog(settings)
     text === nothing && return
     parsed = sections(text)
-    index = findfirst(section -> first(section) == version, parsed)
+    index = findfirst(section -> is_version(section, version), parsed)
     if index === nothing
         failure("Changelog", "CHANGELOG.md has no section for $(version); move the unreleased entries under a heading `## [$(version)]`.")
         return
     end
-    entries(last(parsed[index])) > 0 || failure("Changelog", "The section of $(version) in CHANGELOG.md has no entries.")
+    isempty(entries(parsed[index])) && failure("Changelog", "The section of $(version) in CHANGELOG.md has no entries.")
 
-    unreleased = findfirst(section -> first(section) === :unreleased, parsed)
+    unreleased = unreleased_index(parsed)
     if unreleased !== nothing
-        entries(last(parsed[unreleased])) == 0 || failure("Changelog", "The unreleased section of CHANGELOG.md still has entries; a release moves them into the section of $(version).")
+        isempty(entries(parsed[unreleased])) || failure("Changelog", "The unreleased section of CHANGELOG.md still has entries; a release moves them into the section of $(version).")
         unreleased < index || failure("Changelog", "The unreleased section of CHANGELOG.md must come before the section of $(version).")
     end
     # The newest version comes first: no version's section comes before the new one's, and none after it is newer.
-    for (key, _) in parsed[1:(index - 1)]
-        key isa VersionNumber && failure("Changelog", "The section of $(version) in CHANGELOG.md must come before that of $(key).")
+    for earlier in versions(parsed[1:(index - 1)])
+        failure("Changelog", "The section of $(version) in CHANGELOG.md must come before that of $(earlier).")
     end
-    for (key, _) in parsed[(index + 1):end]
-        key isa VersionNumber && key >= version && failure("Changelog", "The section of $(key) in CHANGELOG.md must come after that of $(version), which is newer.")
+    for later in versions(parsed[(index + 1):end])
+        later >= version && failure("Changelog", "The section of $(later) in CHANGELOG.md must come after that of $(version), which is newer.")
     end
 
-    base = release_base()
-    base_changelog = base === nothing ? nothing : file_at(base.ref, "CHANGELOG.md")
-    if base_changelog !== nothing && any(section -> first(section) == version, sections(base_changelog))
-        failure("Changelog", "The section of $(version) is already in the changelog of $(base.label); a release adds a new section.")
+    release = last_release(settings)
+    released = release === nothing ? nothing : file_at(settings, release.ref, "CHANGELOG.md")
+    if released !== nothing && any(section -> is_version(section, version), sections(released))
+        failure("Changelog", "The section of $(version) is already in the changelog of $(label(release)); a release adds a new section.")
     end
-    CHECK_LINKS && check_links(text, parsed)
-    println("Changelog: the section of $(version) has $(entries(last(parsed[index]))) entries.")
+    settings.check_links && check_links(settings, text, parsed)
+    println("Changelog: the section of $(version) has $(length(entries(parsed[index]))) entries.")
     return
 end
 
 # Changelog entry
 # ---------------
 
-# The entries of the unreleased section of a changelog's `parsed` sections.
-function unreleased_entries(parsed)
-    index = findfirst(section -> first(section) === :unreleased, parsed)
-    return index === nothing ? String[] : filter(is_entry, last(parsed[index]))
-end
+# Why a pull request from `branch` needs no new changelog entry, or `nothing` where it needs one.
+exemption(::Settings, ::Branch) = nothing
+exemption(::Settings, ::ReleaseOrHotfix) = "The pull request is a release"
+exemption(settings::Settings{Gitflow}, branch::Branch{BackMerge}) = "$(branch.name) brings $(settings.main_branch) back into $(settings.develop_branch)"
+# Under gitflow, a release or hotfix branch doesn't merge into develop, which the source branch check reports.
+exemption(::Settings{Gitflow}, ::ReleaseOrHotfix) = nothing
 
-# Whether the pull request is a release, which moves the changelog's entries rather than adding one.
-function is_release()
-    MODEL == "trunk" && return base_version() != head_version()
-    return release_or_hotfix(HEAD_REF)
-end
-
-# A pull request of unreleased work adds an entry to the unreleased section of the changelog, or rewords one, unless it has the label `SKIP_LABEL`.
-function check_entry()
-    if MODEL == "gitflow" && back_merge(HEAD_REF)
-        note("$(HEAD_REF) brings $(MAIN_BRANCH) back into $(DEVELOP_BRANCH), so it needs no new changelog entry.")
-        return
-    elseif MODEL != "gitflow" && is_release()
-        note("The pull request is a release, so it needs no new changelog entry.")
-        return
-    elseif SKIP_CHANGELOG
-        note("The pull request has the `$(SKIP_LABEL)` label, so it needs no new changelog entry.")
+# A pull request of unreleased work adds an entry to the unreleased section of the changelog, or rewords one, unless it has the label `skip_label`.
+function check(::EntryCheck, settings::Settings)
+    reason = exemption(settings, head_branch(settings))
+    reason === nothing && settings.skip_changelog && (reason = "The pull request has the `$(settings.skip_label)` label")
+    if reason !== nothing
+        note("$(reason), so it needs no new changelog entry.")
         return
     end
-    text = head_changelog()
+    text = head_changelog(settings)
     text === nothing && return
-    base = base_file("CHANGELOG.md")
+    base = base_file(settings, "CHANGELOG.md")
     known = Set(base === nothing ? String[] : unreleased_entries(sections(base)))
     added = filter(entry -> !(entry in known), unreleased_entries(sections(text)))
     if isempty(added)
-        failure("Changelog entry", "CHANGELOG.md has no new entry under `## [Unreleased]`; describe the change there, or, for a change that users won't notice, a maintainer adds the `$(SKIP_LABEL)` label.")
+        failure("Changelog entry", "CHANGELOG.md has no new entry under `## [Unreleased]`; describe the change there, or, for a change that users won't notice, a maintainer adds the `$(settings.skip_label)` label.")
     else
         println("Changelog entry: $(length(added)) new $(length(added) == 1 ? "entry" : "entries") under `## [Unreleased]`.")
     end
@@ -513,10 +690,10 @@ end
 # Release
 # -------
 
-# Whether the pull request is a release of the trunk model, which changes the version, written to the step's outputs as `release=true` or `release=false`.
-function check_release()
-    release = is_release()
-    println(release ? "The pull request changes the version to $(head_version()), so it's a release." : "The pull request keeps the version, so it isn't a release.")
+# Whether the pull request is a release, written to the step's outputs as `release=true` or `release=false`, for the trunk workflow to choose its checks.
+function check(::ReleaseCheck, settings::Settings)
+    release = is_release(settings)
+    println(release ? "The pull request changes the version to $(head_version(settings)), so it's a release." : "The pull request keeps the version, so it isn't a release.")
     path = get(ENV, "GITHUB_OUTPUT", "")
     isempty(path) || open(io -> println(io, "release=$(release)"), path, "a")
     return
@@ -648,37 +825,39 @@ function julia_in(directory, code, arguments...)
     return success(process), String(take!(output)), String(take!(errors))
 end
 
-# A copy of the repository at `ref`, in a temporary directory.
-function checkout(ref)
+# Run `f` on a copy of the repository at `ref`, in a temporary directory.
+function with_checkout(f, settings::Settings, ref)
     directory = mktempdir()
-    run(pipeline(`git -C $(ROOT) worktree add --detach $(directory) $(ref)`; stdout = devnull, stderr = devnull))
-    return directory
+    run(pipeline(`git -C $(settings.root) worktree add --detach $(directory) $(ref)`; stdout = devnull, stderr = devnull))
+    try
+        return f(directory)
+    finally
+        run(pipeline(ignorestatus(`git -C $(settings.root) worktree remove --force $(directory)`); stdout = devnull, stderr = devnull))
+    end
 end
 
-remove_checkout(directory) = run(pipeline(ignorestatus(`git -C $(ROOT) worktree remove --force $(directory)`); stdout = devnull, stderr = devnull))
-
-# The entries of the base's public API that the head no longer provides.
-function api_removals(base_directory, name, label)
+# The entries of the last release's public API that the head no longer provides.
+function api_removals(settings::Settings, release::LastRelease, directory, name)
     listing = joinpath(mktempdir(), "base.txt")
-    ok, output, errors = julia_in(base_directory, SURFACE, name, "list")
-    ok || (failure("Breaking changes", "The public API of $(label) couldn't be listed:\n$(last(errors, 2000))"); return String[])
+    ok, output, errors = julia_in(directory, SURFACE, name, "list")
+    ok || (failure("Breaking changes", "The public API of $(label(release)) couldn't be listed:\n$(last(errors, 2000))"); return String[])
     write(listing, output)
-    ok, output, errors = julia_in(ROOT, SURFACE, name, "against", listing)
-    ok || (failure("Breaking changes", "The public API of $(HEAD_REF) couldn't be compared:\n$(last(errors, 2000))"); return String[])
+    ok, output, errors = julia_in(settings.root, SURFACE, name, "against", listing)
+    ok || (failure("Breaking changes", "The public API of $(head_label(settings)) couldn't be compared:\n$(last(errors, 2000))"); return String[])
     return filter(!isempty, split(output, '\n'))
 end
 
-# Run the base's tests against the head: a copy of the head with the base's `test/` directory.
-function old_tests(base_directory)
+# Run the last release's tests against the head: a copy of the head with the release's `test/` directory.
+function old_tests(settings::Settings, release_directory)
     directory = mktempdir()
     # Without the manifest, which Pkg resolves afresh for the head's dependencies.
-    for entry in readdir(ROOT)
-        entry in (".git", "test") || startswith(entry, "Manifest") || cp(joinpath(ROOT, entry), joinpath(directory, entry))
+    for entry in readdir(settings.root)
+        entry in (".git", "test") || startswith(entry, "Manifest") || cp(joinpath(settings.root, entry), joinpath(directory, entry))
     end
-    isdir(joinpath(base_directory, "test")) || return true, "the base has no tests"
-    cp(joinpath(base_directory, "test"), joinpath(directory, "test"))
-    # A base from before the tests were a project of the workspace keeps the head's test project, which the head's workspace names.
-    head_test_project = joinpath(ROOT, "test", "Project.toml")
+    isdir(joinpath(release_directory, "test")) || return true, "the base has no tests"
+    cp(joinpath(release_directory, "test"), joinpath(directory, "test"))
+    # A release from before the tests were a project of the workspace keeps the head's test project, which the head's workspace names.
+    head_test_project = joinpath(settings.root, "test", "Project.toml")
     test_project = joinpath(directory, "test", "Project.toml")
     isfile(test_project) || !isfile(head_test_project) || cp(head_test_project, test_project)
     ok, output, errors = julia_in(directory, "using Pkg; Pkg.test()")
@@ -688,56 +867,54 @@ function old_tests(base_directory)
     return ok, join(failing, "\n")
 end
 
-function check_breaking()
-    base = release_base()
-    if base === nothing
+# A breaking change takes a breaking version, which a hotfix can't.
+function check_breaking_version(::Branch, head, base)
+    head in breaking_steps(base) || failure("Breaking changes", "The changes are breaking for users of $(base), so the version must be $(join(breaking_steps(base), " or ")), not $(head); see the job summary.")
+    return
+end
+
+check_breaking_version(::Branch{Hotfix}, head, base) = failure("Breaking changes", "A hotfix may not make breaking changes to $(base); release the change from a release branch with a breaking version.")
+
+function check(::BreakingCheck, settings::Settings)
+    release = last_release(settings)
+    if release === nothing
         note("There's no earlier release, so there's nothing to break.")
         return
     end
-    head = head_version()
-    head_label = isempty(HEAD_REF) ? HEAD_SHA : HEAD_REF
-    name = head_project()["name"]
-    base_project = file_at(base.ref, "Project.toml")
-    narrowed, widened = compat_changes(TOML.parse(base_project), head_project())
-
-    base_directory = checkout(base.ref)
-    removed, (tests_pass, failing) = try
-        api_removals(base_directory, name, base.label), old_tests(base_directory)
-    finally
-        remove_checkout(base_directory)
+    head = head_version(settings)
+    name = head_project(settings)["name"]
+    narrowed, widened = compat_changes(TOML.parse(file_at(settings, release.ref, "Project.toml")), head_project(settings))
+    removed, (tests_pass, failing) = with_checkout(settings, release.ref) do directory
+        api_removals(settings, release, directory, name), old_tests(settings, directory)
     end
 
-    breaking = !isempty(removed) || !tests_pass || !isempty(narrowed)
-    report = ["## Breaking changes from $(base.version) to $(head)", ""]
+    base = label(release)
+    report = ["## Breaking changes from $(release.version) to $(head)", ""]
     if isempty(removed)
-        push!(report, "The public API of $(base.label) is still provided.")
+        push!(report, "The public API of $(base) is still provided.")
     else
-        push!(report, "The public API of $(base.label) that $(head_label) no longer provides:", "", "```", replace.(removed, '\t' => ' ')..., "```")
+        push!(report, "The public API of $(base) that $(head_label(settings)) no longer provides:", "", "```", replace.(removed, '\t' => ' ')..., "```")
     end
     push!(report, "")
     if isempty(narrowed)
-        push!(report, "The compat bounds of $(base.label) are still admitted.")
+        push!(report, "The compat bounds of $(base) are still admitted.")
     else
-        push!(report, "The compat bounds that no longer admit every version that $(base.label) did:", "", "```", narrowed..., "```")
+        push!(report, "The compat bounds that no longer admit every version that $(base) did:", "", "```", narrowed..., "```")
     end
     isempty(widened) || push!(report, "", "Other changes to compat bounds, which aren't breaking:", "", "```", widened..., "```")
     push!(report, "")
-    push!(report, tests_pass ? "The tests of $(base.label) pass." : "The tests of $(base.label) fail against $(head_label):\n\n```\n$(failing)\n```")
+    push!(report, tests_pass ? "The tests of $(base) pass." : "The tests of $(base) fail against $(head_label(settings)):\n\n```\n$(failing)\n```")
     summary(join(report, '\n'))
     println(join(report, '\n'))
-    breaking || return
+    isempty(removed) && tests_pass && isempty(narrowed) && return
 
-    if release_kind() == "hotfix"
-        failure("Breaking changes", "A hotfix may not make breaking changes to $(base.version); release the change from a release branch with a breaking version.")
-    elseif !(head in breaking_steps(base.version))
-        failure("Breaking changes", "The changes are breaking for users of $(base.version), so the version must be $(join(breaking_steps(base.version), " or ")), not $(head); see the job summary.")
-    end
-    text = head_changelog()
+    check_breaking_version(head_branch(settings), head, release.version)
+    text = head_changelog(settings)
     text === nothing && return
     parsed = sections(text)
-    index = findfirst(section -> first(section) == head, parsed)
-    if index === nothing || subsection_entries(last(parsed[index]), "Breaking") == 0
-        failure("Breaking changes", "The changes are breaking for users of $(base.version), so the section of $(head) in CHANGELOG.md needs a `### Breaking` subsection that describes them; see the job summary.")
+    index = findfirst(section -> is_version(section, head), parsed)
+    if index === nothing || subsection_entries(parsed[index], "Breaking") == 0
+        failure("Breaking changes", "The changes are breaking for users of $(release.version), so the section of $(head) in CHANGELOG.md needs a `### Breaking` subsection that describes them; see the job summary.")
     end
     return
 end
@@ -745,14 +922,9 @@ end
 # Main
 # ----
 
-const CHECKS = Dict(
-    "source" => check_source, "version" => check_version, "changelog" => check_changelog,
-    "breaking" => check_breaking, "entry" => check_entry, "release" => check_release,
-)
-
-if length(ARGS) != 1 || !haskey(CHECKS, ARGS[1]) || !haskey(MODELS, MODEL)
+if length(ARGS) != 1 || !haskey(CHECKS, ARGS[1]) || !haskey(MODELS, input(ENV, "MODEL", "gitflow"))
     println(stderr, "usage: MODEL=$(join(sort(collect(keys(MODELS))), '|')) julia checks.jl $(join(sort(collect(keys(CHECKS))), '|'))")
     exit(2)
 end
-CHECKS[ARGS[1]]()
+check(CHECKS[ARGS[1]], Settings())
 isempty(ERRORS) || exit(1)
