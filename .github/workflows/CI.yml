@@ -1,0 +1,59 @@
+# The repository's own checks: the tests of the checks, Runic formatting, actionlint on the workflows, and the pins of the workflows' calls of the action.
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    name: Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: julia-actions/setup-julia@v3
+        with:
+          version: '1'
+      - uses: julia-actions/cache@v3
+      - name: Run the tests
+        run: |
+          julia --project=test -e 'using Pkg; Pkg.instantiate()'
+          julia --project=test test/runtests.jl
+
+  runic:
+    name: Runic
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: julia-actions/setup-julia@v3
+        with:
+          version: '1'
+      - uses: fredrikekre/runic-action@v1
+        with:
+          version: '1'
+
+  actionlint:
+    name: actionlint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: docker://rhysd/actionlint:1.7.7
+        with:
+          args: -color
+
+  pins:
+    name: Pins
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Check that the workflows call the action at one release
+        env:
+          TAG: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
+        run: .github/scripts/check_pins.sh
