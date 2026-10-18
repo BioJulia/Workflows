@@ -1,0 +1,134 @@
+# OneFlow checks, for a repository with one main branch, from which release and hotfix branches are released and merged back.
+# A release/vX.Y.Z branch from the main branch, or a hotfix/vX.Y.Z branch from the last release's tag, sets the version and changelog; its last commit is registered, tagged by TagBot, and merged back by pull request.
+# Called from the repository's own workflow, on pull requests into the main branch:
+#
+#   on:
+#     pull_request:
+#       branches: [main]
+#       types: [opened, synchronize, reopened, labeled, unlabeled]
+#   jobs:
+#     oneflow:
+#       uses: BioJulia/Workflows/.github/workflows/oneflow.yml@v1
+#       permissions:
+#         contents: read
+#
+# From a release or hotfix branch: Source branch, Version, Changelog and Breaking changes, on the branch's head commit, which is the release.
+# From any other branch: Source branch and Changelog entry.
+# The checks that don't apply are skipped, and a skipped check counts as passed, so the ruleset may require every check, as "oneflow / Source branch" and so on.
+name: OneFlow
+
+on:
+  workflow_call:
+    inputs:
+      main-branch:
+        description: The main branch.
+        type: string
+        default: main
+      skip-label:
+        description: The label that exempts a pull request from the changelog entry.
+        type: string
+        default: skip changelog
+      check-links:
+        description: Whether to check the changelog's comparison links.
+        type: boolean
+        default: true
+      registry:
+        description: The registry of the package's releases.
+        type: string
+        default: General
+
+permissions: {}
+
+jobs:
+  source:
+    name: Source branch
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: BioJulia/Workflows@v1.0.0
+        with:
+          check: source
+          model: oneflow
+          main-branch: ${{ inputs.main-branch }}
+          registry: ${{ inputs.registry }}
+
+  version:
+    name: Version
+    if: startsWith(github.head_ref, 'release/') || startsWith(github.head_ref, 'hotfix/')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      # The release is the branch's head commit, not the merge commit; GitHub keeps every pull request's head, so this works for forks too.
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+      - uses: BioJulia/Workflows@v1.0.0
+        with:
+          check: version
+          model: oneflow
+          main-branch: ${{ inputs.main-branch }}
+          registry: ${{ inputs.registry }}
+
+  changelog:
+    name: Changelog
+    if: startsWith(github.head_ref, 'release/') || startsWith(github.head_ref, 'hotfix/')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+      - uses: BioJulia/Workflows@v1.0.0
+        with:
+          check: changelog
+          model: oneflow
+          main-branch: ${{ inputs.main-branch }}
+          check-links: ${{ inputs.check-links }}
+          registry: ${{ inputs.registry }}
+
+  breaking:
+    name: Breaking changes
+    if: startsWith(github.head_ref, 'release/') || startsWith(github.head_ref, 'hotfix/')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+      - uses: julia-actions/setup-julia@v3
+        with:
+          version: '1'
+      - uses: julia-actions/cache@v3
+      - uses: BioJulia/Workflows@v1.0.0
+        with:
+          check: breaking
+          model: oneflow
+          main-branch: ${{ inputs.main-branch }}
+          registry: ${{ inputs.registry }}
+
+  entry:
+    name: Changelog entry
+    if: ${{ !startsWith(github.head_ref, 'release/') && !startsWith(github.head_ref, 'hotfix/') }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: BioJulia/Workflows@v1.0.0
+        with:
+          check: entry
+          model: oneflow
+          main-branch: ${{ inputs.main-branch }}
+          skip-label: ${{ inputs.skip-label }}
