@@ -1,0 +1,102 @@
+# Back-merge, for gitflow: once a release or hotfix merges into the main branch, open the pull request that brings it back into develop.
+# Called from the repository's own workflow, on pushes to the main branch:
+#
+#   on:
+#     push:
+#       branches: [main]
+#     workflow_dispatch:
+#   jobs:
+#     back-merge:
+#       uses: BioJulia/Workflows/.github/workflows/back-merge.yml@v1
+#       permissions:
+#         contents: write
+#         pull-requests: write
+#       secrets:
+#         RELEASEFLOW_TOKEN: ${{ secrets.RELEASEFLOW_TOKEN }}
+#
+# The pull request comes from a branch back-merge/vX.Y.Z at the main branch's commit, so that a conflict with develop is resolved on that branch, by merging develop into it, without pushing to the main branch.
+# Pull requests opened with the default GITHUB_TOKEN don't start workflows, so their required checks would never report.
+# The secret RELEASEFLOW_TOKEN avoids that: a fine-grained personal access token, or a GitHub App's token, with read and write access to the repository's contents, pull requests and workflows, since the main branch may change workflows that develop lacks.
+# Without it, the default token opens the pull request, which says to close and reopen it, so that the checks run.
+# Either way, the repository must allow GitHub Actions to create pull requests, in Settings → Actions → General.
+name: Back-merge
+
+on:
+  workflow_call:
+    inputs:
+      main-branch:
+        description: The branch of releases.
+        type: string
+        default: main
+      develop-branch:
+        description: The branch of unreleased work.
+        type: string
+        default: develop
+    secrets:
+      RELEASEFLOW_TOKEN:
+        description: A token that opens the pull request so that its checks run.
+        required: false
+
+permissions: {}
+
+jobs:
+  back-merge:
+    name: Back-merge
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    # One back-merge at a time, so that two pushes to the main branch don't race to open the same pull request.
+    concurrency:
+      group: back-merge-${{ github.repository }}
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.main-branch }}
+          fetch-depth: 0
+      - name: Open the pull request from the main branch into develop
+        env:
+          GH_TOKEN: ${{ secrets.RELEASEFLOW_TOKEN || github.token }}
+          HAS_TOKEN: ${{ secrets.RELEASEFLOW_TOKEN != '' }}
+          REPOSITORY: ${{ github.repository }}
+          RELEASEFLOW_MAIN_BRANCH: ${{ inputs.main-branch }}
+          RELEASEFLOW_DEVELOP_BRANCH: ${{ inputs.develop-branch }}
+        run: |
+          set -euo pipefail
+          version=$(sed -n 's/^version = "\(.*\)"$/\1/p' Project.toml)
+          if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error title=Back-merge::Project.toml on $RELEASEFLOW_MAIN_BRANCH has no version of the form X.Y.Z, so the back-merge branch can't be named."
+            exit 1
+          fi
+          branch="back-merge/v$version"
+          sha=$(git rev-parse HEAD)
+
+          # Nothing to bring back if develop already has the main branch's commit.
+          if git merge-base --is-ancestor "$sha" "origin/$RELEASEFLOW_DEVELOP_BRANCH"; then
+            echo "$RELEASEFLOW_DEVELOP_BRANCH already has $RELEASEFLOW_MAIN_BRANCH's commit $sha; there's nothing to bring back."
+            exit 0
+          fi
+
+          # The branch is created through the API rather than pushed, and left as it is if it exists, since a maintainer may have resolved conflicts on it.
+          if git ls-remote --exit-code --heads origin "$branch" > /dev/null; then
+            echo "The branch $branch exists already."
+          else
+            gh api "repos/$REPOSITORY/git/refs" -f ref="refs/heads/$branch" -f sha="$sha" > /dev/null
+            echo "Created the branch $branch at $sha."
+          fi
+
+          open=$(gh pr list --repo "$REPOSITORY" --head "$branch" --base "$RELEASEFLOW_DEVELOP_BRANCH" --state open --json number --jq length)
+          if [ "$open" != "0" ]; then
+            echo "A pull request from $branch into $RELEASEFLOW_DEVELOP_BRANCH is open already."
+            exit 0
+          fi
+
+          body="This brings $RELEASEFLOW_MAIN_BRANCH back into $RELEASEFLOW_DEVELOP_BRANCH after the release or hotfix of v$version, as gitflow does.
+          If it conflicts with $RELEASEFLOW_DEVELOP_BRANCH, merge $RELEASEFLOW_DEVELOP_BRANCH into $branch, resolve the conflicts there, and push."
+          if [ "$HAS_TOKEN" != "true" ]; then
+            body="$body
+
+          It was opened with the default token, which doesn't start workflows, so close and reopen it to run the checks; the secret RELEASEFLOW_TOKEN avoids this."
+          fi
+          gh pr create --repo "$REPOSITORY" --head "$branch" --base "$RELEASEFLOW_DEVELOP_BRANCH" --title "Merge $RELEASEFLOW_MAIN_BRANCH (v$version) into $RELEASEFLOW_DEVELOP_BRANCH" --body "$body"
