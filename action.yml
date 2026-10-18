@@ -1,5 +1,5 @@
 name: Julia release checks
-description: Checks a pull request of a Julia package under gitflow, OneFlow or trunk, with checks/checks.jl at this action's own version.
+description: Checks a pull request of a Julia package under gitflow, OneFlow or trunk, with the ReleaseFlow package in checks/ at this action's own version.
 
 # Every input reaches the script through the environment, never the shell, so that a crafted branch name can't run commands.
 inputs:
@@ -66,4 +66,4 @@ runs:
       run: |
         export RELEASEFLOW_BASE_REF="${BASE_REF_INPUT:-origin/$RELEASEFLOW_BASE_BRANCH}"
         export RELEASEFLOW_DEVELOP_REF="origin/$RELEASEFLOW_DEVELOP_BRANCH"
-        julia --startup-file=no "$GITHUB_ACTION_PATH/checks/checks.jl" "$CHECK"
+        julia --startup-file=no --project="$GITHUB_ACTION_PATH/checks" "$GITHUB_ACTION_PATH/checks/main.jl" "$CHECK"
