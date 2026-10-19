@@ -17,5 +17,6 @@ jobs:
       pull-requests: write
     with:
       main-branch: master
+      project: ReleaseFlow
     secrets:
       RELEASEFLOW_TOKEN: ${{ secrets.RELEASEFLOW_TOKEN }}

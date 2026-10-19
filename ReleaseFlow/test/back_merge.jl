@@ -46,11 +46,11 @@ end
     git(work, "fetch", "-q", "origin")
     log = joinpath(directory, "log")
 
-    function step(; has_token = "true", open = "0")
+    function step(; has_token = "true", open = "0", project = "")
         write(log, "")
         environment = Dict(
             "PATH" => "$(bin):$(ENV["PATH"])", "LOG" => log, "ORIGIN" => origin, "GH_TOKEN" => "token", "HAS_TOKEN" => has_token,
-            "REPOSITORY" => "Example/Toy.jl", "RELEASEFLOW_MAIN_BRANCH" => "master", "RELEASEFLOW_DEVELOP_BRANCH" => "develop", "OPEN_PRS" => open,
+            "REPOSITORY" => "Example/Toy.jl", "RELEASEFLOW_MAIN_BRANCH" => "master", "RELEASEFLOW_DEVELOP_BRANCH" => "develop", "OPEN_PRS" => open, "RELEASEFLOW_PROJECT" => project,
         )
         output = IOBuffer()
         process = run(pipeline(Cmd(addenv(`bash $(script)`, environment); dir = work, ignorestatus = true); stdout = output, stderr = output))
@@ -76,8 +76,14 @@ end
     git(work, "fetch", "-q", "origin")
     result = step()
     @test result.code == 0 && occursin("there's nothing to bring back", result.output) && isempty(result.calls)
+    # A package in a subdirectory names the branch from its own Project.toml.
+    commit!(work, "Subdirectory", "lib/Toy/Project.toml" => project("0.3.0"), "subdirectory.txt" => "x")
+    git(work, "push", "-q", "origin", "master")
+    git(work, "fetch", "-q", "origin")
+    result = step(; project = "lib/Toy/")
+    @test result.code == 0 && occursin("back-merge/v0.3.0", result.output)
     # A version that can't name the branch is an error.
     commit!(work, "Bad version", "Project.toml" => replace(project("0.1.0"), "0.1.0" => "0.1"))
     result = step()
-    @test result.code == 1 && occursin("has no version of the form X.Y.Z", result.output)
+    @test result.code == 1 && occursin("Project.toml on master has no version of the form X.Y.Z", result.output)
 end

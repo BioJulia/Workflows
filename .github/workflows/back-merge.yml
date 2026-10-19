@@ -32,6 +32,10 @@ on:
         description: The branch of unreleased work.
         type: string
         default: develop
+      project:
+        description: The package's directory, relative to the repository's root, whose Project.toml gives the version, for a package in a subdirectory.
+        type: string
+        default: ''
     secrets:
       RELEASEFLOW_TOKEN:
         description: A token that opens the pull request so that its checks run.
@@ -62,11 +66,13 @@ jobs:
           REPOSITORY: ${{ github.repository }}
           RELEASEFLOW_MAIN_BRANCH: ${{ inputs.main-branch }}
           RELEASEFLOW_DEVELOP_BRANCH: ${{ inputs.develop-branch }}
+          RELEASEFLOW_PROJECT: ${{ inputs.project }}
         run: |
           set -euo pipefail
-          version=$(sed -n 's/^version = "\(.*\)"$/\1/p' Project.toml)
+          project_file="${RELEASEFLOW_PROJECT:+${RELEASEFLOW_PROJECT%/}/}Project.toml"
+          version=$(sed -n 's/^version = "\(.*\)"$/\1/p' "$project_file")
           if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "::error title=Back-merge::Project.toml on $RELEASEFLOW_MAIN_BRANCH has no version of the form X.Y.Z, so the back-merge branch can't be named."
+            echo "::error title=Back-merge::$project_file on $RELEASEFLOW_MAIN_BRANCH has no version of the form X.Y.Z, so the back-merge branch can't be named."
             exit 1
           fi
           branch="back-merge/v$version"
