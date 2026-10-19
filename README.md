@@ -61,6 +61,27 @@ jobs:
       RELEASEFLOW_TOKEN: ${{ secrets.RELEASEFLOW_TOKEN }}
 ```
 
+With `from` and `into`, the back-merge brings any branch into any other, such as a maintenance branch into the main branch, from a caller that runs on pushes to the maintenance branch:
+
+```yaml
+on:
+  push:
+    branches: [release-1.x]
+jobs:
+  back-merge:
+    uses: BioJulia/Workflows/.github/workflows/back-merge.yml@v1
+    permissions:
+      contents: write
+      pull-requests: write
+    with:
+      from: release-1.x
+      into: master
+```
+
+From the main branch, the pull request's branch is `back-merge/vX.Y.Z`, named after the release; from any other, `back-merge/<from>-<commit>`, such as `back-merge/release-1.x-abc1234`.
+The `releaseflow` environment then also allows the branch that it brings.
+Under gitflow, ReleaseFlow's source branch check allows a `back-merge/*` branch only into develop, so a merge into the main branch suits a repository that doesn't require the gitflow checks there.
+
 And the dependents' tests, in `.github/workflows/Dependents.yml`, which run the tests of the packages that depend on this one with the pull request's branch in its place:
 
 ```yaml
@@ -142,6 +163,8 @@ A package can follow the major tag, `v1`, or pin a release, such as `v1.0.0`; De
 |:--|:--|:--|:--|
 | `main-branch` | `main` | all | The branch of releases. |
 | `develop-branch` | `develop` | gitflow, back-merge | The branch of unreleased work. |
+| `from` | the main branch | back-merge | The branch to bring. |
+| `into` | the develop branch | back-merge | The branch to bring it into. |
 | `skip-label` | `skip changelog` | gitflow, oneflow, trunk | The label that exempts a pull request from the changelog entry. |
 | `check-links` | `true` | gitflow, oneflow, trunk | Whether to check the changelog's comparison links. |
 | `require-entry` | `true` | trunk | Whether a pull request that isn't a release must add a changelog entry, for a changelog without an unreleased section. |
