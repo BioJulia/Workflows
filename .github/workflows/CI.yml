@@ -1,4 +1,4 @@
-# The repository's own checks: the tests of the checks, Runic formatting, actionlint on the workflows, and the pins of the workflows' calls of the action.
+# The repository's own checks: the tests of ReleaseFlow, Runic formatting, actionlint on the workflows, and the pins of the workflows' calls of the action.
 name: CI
 
 on:
@@ -24,8 +24,8 @@ jobs:
       - uses: julia-actions/cache@v3
       - name: Run the tests
         run: |
-          julia --project=checks/test -e 'using Pkg; Pkg.instantiate()'
-          julia --project=checks/test checks/test/runtests.jl
+          julia --project=ReleaseFlow/test -e 'using Pkg; Pkg.instantiate()'
+          julia --project=ReleaseFlow/test ReleaseFlow/test/runtests.jl
 
   runic:
     name: Runic

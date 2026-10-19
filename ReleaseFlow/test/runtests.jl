@@ -2,7 +2,7 @@
 # ===================
 #
 # The unit tests call ReleaseFlow's functions directly.
-# The end-to-end tests build git repositories of a toy package, `Toy`, in temporary directories, and run `checks/main.jl` in them, as the workflows do, with a scratch registry, so that the tests need no network.
+# The end-to-end tests build git repositories of a toy package, `Toy`, in temporary directories, and run `ReleaseFlow/main.jl` in them, as the workflows do, with a scratch registry, so that the tests need no network.
 
 using Test
 using ReleaseFlow

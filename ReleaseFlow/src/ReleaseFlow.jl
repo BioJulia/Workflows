@@ -17,7 +17,7 @@ Git doesn't record which branch a branch was made from, only its commits, so the
 
 Each check is a method of `check(::C, ::Settings{M})`; the rules that differ between models dispatch on the model `M`, those that differ between kinds of branch on the kind `K` of a `Branch{K}`, and those that differ by where the last release was found on the source `S` of a `LastRelease{S}`.
 
-Run from the root of the package's repository with `julia --project=<Workflows>/checks <Workflows>/checks/main.jl source|version|changelog|breaking|entry|is-release`, or call [`main`](@ref).
+Run from the root of the package's repository with `julia --project=<Workflows>/ReleaseFlow <Workflows>/ReleaseFlow/main.jl source|version|changelog|breaking|entry|is-release`, or call [`main`](@ref).
 Inputs are environment variables, so that branch names never reach a shell, and an empty one counts as missing:
 - `RELEASEFLOW_MODEL`, `gitflow`, `oneflow` or `trunk`, `gitflow` unless given;
 - `RELEASEFLOW_MAIN_BRANCH` and `RELEASEFLOW_DEVELOP_BRANCH`, `main` and `develop` unless given;
@@ -54,7 +54,7 @@ include("checks/entry.jl")
 include("checks/is_release.jl")
 include("checks/breaking.jl")
 
-const USAGE = "usage: RELEASEFLOW_MODEL=$(join(sort(collect(keys(MODELS))), '|')) julia --project=checks checks/main.jl $(join(sort(collect(keys(CHECKS))), '|'))"
+const USAGE = "usage: RELEASEFLOW_MODEL=$(join(sort(collect(keys(MODELS))), '|')) julia --project=ReleaseFlow ReleaseFlow/main.jl $(join(sort(collect(keys(CHECKS))), '|'))"
 
 """
     main(arguments; environment = ENV, root = pwd()) -> Int

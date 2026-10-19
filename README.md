@@ -2,8 +2,11 @@
 
 Reusable GitHub Actions workflows for Julia packages: checks that a pull request follows the repository's branching model, and that a release takes the right version, describes itself in the changelog, and marks its breaking changes.
 
-The checks are a small Julia package, [`ReleaseFlow`](checks/src/ReleaseFlow.jl), in `checks/`, which a composite action, [`action.yml`](action.yml), runs at its own version, and which the reusable workflows call.
-A package calls a workflow by its tag, so the checks have one source of truth, and a package updates them by moving to a newer tag.
+The repository holds two things:
+- **the workflows**, in [`.github/workflows/`](.github/workflows), with the composite action, [`action.yml`](action.yml), that they call, released with tags `vX.Y.Z`;
+- **the checks**, a Julia package, [ReleaseFlow](ReleaseFlow), registered in General from this repository's `ReleaseFlow/` directory, released with tags `ReleaseFlow-vX.Y.Z`.
+
+The action runs the copy of ReleaseFlow at its own tag, so a workflow and its checks always come from one release; a package calls a workflow by its tag, and updates the checks by moving to a newer tag.
 
 ## Models
 
@@ -124,31 +127,22 @@ The tag `vX.Y.Z` is a second datapoint, and must agree with the registry; where 
 
 ## Running the checks locally
 
-From the root of a package's repository:
-
-```bash
-RELEASEFLOW_MODEL=gitflow RELEASEFLOW_BASE_BRANCH=master RELEASEFLOW_HEAD_REF=release/v0.2.0 julia --project=path/to/Workflows/checks path/to/Workflows/checks/main.jl source
-```
-
-The docstring of [`ReleaseFlow`](checks/src/ReleaseFlow.jl) lists its inputs, which are environment variables.
-
-The package has a file per concern: the model, settings, branch, last release and changelog types in `checks/src/`, one file per check in `checks/src/checks/`, and the listing of a package's public API, which the breaking check runs in the package's own project, in `checks/src/surface.jl`.
-Each check is a method of `check(::C, ::Settings{M})`, and the rules that differ dispatch on the model `M`, the kind `K` of a `Branch{K}`, or the source `S` of a `LastRelease{S}`.
+[ReleaseFlow's README](ReleaseFlow/README.md) describes installing the package and running a check from the root of a package's repository, before a pull request.
 
 ## Developing
 
-The package's tests, in `checks/test/`, call it directly, and build git repositories of a toy package and a scratch registry for the end-to-end checks, so they need no network:
+ReleaseFlow's tests, in `ReleaseFlow/test/`, call it directly, and build git repositories of a toy package and a scratch registry for the end-to-end checks, so they need no network:
 
 ```bash
-julia --project=checks/test -e 'using Pkg; Pkg.instantiate()'
+julia --project=ReleaseFlow/test -e 'using Pkg; Pkg.instantiate()'
 ```
 
 ```bash
-julia --project=checks/test checks/test/runtests.jl
+julia --project=ReleaseFlow/test ReleaseFlow/test/runtests.jl
 ```
 
-The reusable workflows call the action at the release that they belong to, such as `BioJulia/Workflows@v1.0.0`, so that a workflow and its script come from one release.
-To release:
+The reusable workflows call the action at the release that they belong to, such as `BioJulia/Workflows@v1.0.0`, so that a workflow and its checks come from one release.
+To release the workflows:
 1. set every `uses: BioJulia/Workflows@…` in `.github/workflows/` to the new release, and move the changelog's unreleased entries into its section;
 2. tag the release, such as `v1.0.1`, which the CI's Pins check verifies;
 3. move the major tag, `v1`, to it, with `git tag -f v1 v1.0.1` and `git push -f origin v1`.
