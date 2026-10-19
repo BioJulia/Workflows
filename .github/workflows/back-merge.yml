@@ -17,7 +17,7 @@
 #
 # The pull request comes from a branch back-merge/vX.Y.Z at the main branch's commit, so that a conflict with develop is resolved on that branch, by merging develop into it, without pushing to the main branch.
 # Pull requests opened with the default GITHUB_TOKEN don't start workflows, so their required checks would never report.
-# Another token avoids that, with read and write access to the repository's contents, pull requests and workflows, since the main branch may change workflows that develop lacks:
+# Another token avoids that, with read and write access to pull requests, while the job's own token creates the branch; where GitHub refuses the job's token that branch, because its workflow files differ, the other token creates it, and then needs read and write access to contents and workflows too:
 # - a GitHub App's, created for each run from the secrets BACK_MERGE_APP_ID and BACK_MERGE_APP_PRIVATE_KEY, which opens the pull request as the app's bot;
 # - or the secret BACK_MERGE_TOKEN, a fine-grained personal access token, which opens it as the token's owner.
 # Without either, the default token opens the pull request, which says to close and reopen it, so that the checks run.
@@ -82,8 +82,11 @@ jobs:
           private-key: ${{ secrets.BACK_MERGE_APP_PRIVATE_KEY }}
       - name: Open the pull request from the main branch into develop
         env:
+          # The pull request's token: the app's, or the personal one, or the default one, whose pull requests start no workflows.
           GH_TOKEN: ${{ steps.app.outputs.token || secrets.BACK_MERGE_TOKEN || github.token }}
           HAS_TOKEN: ${{ steps.app.outputs.token != '' || secrets.BACK_MERGE_TOKEN != '' }}
+          # The branch's token: the job's own, so that the pull request's token needs no access to the repository's contents.
+          DEFAULT_TOKEN: ${{ github.token }}
           REPOSITORY: ${{ github.repository }}
           MAIN_BRANCH: ${{ inputs.main-branch }}
           DEVELOP_BRANCH: ${{ inputs.develop-branch }}
@@ -106,11 +109,21 @@ jobs:
           fi
 
           # The branch is created through the API rather than pushed, and left as it is if it exists, since a maintainer may have resolved conflicts on it.
+          # The job's own token creates it, so the pull request's token needs only access to pull requests.
+          # GitHub may refuse the job's token a branch whose workflow files differ from the default branch's, since that token can't have access to workflows; then the pull request's token, given access to contents and workflows, creates it.
+          refusal=$(mktemp)
           if git ls-remote --exit-code --heads origin "$branch" > /dev/null; then
             echo "The branch $branch exists already."
-          else
+          elif GH_TOKEN="$DEFAULT_TOKEN" gh api "repos/$REPOSITORY/git/refs" -f ref="refs/heads/$branch" -f sha="$sha" > /dev/null 2> "$refusal"; then
+            echo "Created the branch $branch at $sha."
+          elif [ "$HAS_TOKEN" = "true" ]; then
+            echo "The job's token couldn't create the branch $branch: $(cat "$refusal")"
+            echo "Creating it with the pull request's token, which needs read and write access to the repository's contents and workflows."
             gh api "repos/$REPOSITORY/git/refs" -f ref="refs/heads/$branch" -f sha="$sha" > /dev/null
             echo "Created the branch $branch at $sha."
+          else
+            echo "::error title=Back-merge::The job's token couldn't create the branch $branch: $(cat "$refusal")"
+            exit 1
           fi
 
           open=$(gh pr list --repo "$REPOSITORY" --head "$branch" --base "$DEVELOP_BRANCH" --state open --json number --jq length)
