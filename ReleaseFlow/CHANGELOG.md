@@ -10,6 +10,7 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 - The reusable workflow `tag.yml`, which moves each major tag, such as `v1`, to the newest release of its major version, `vX.Y.Z`, whichever made the tag, TagBot or a maintainer, and whenever, for a repository that callers follow by its major tag; it never moves a major tag backwards, leaves pre-releases out, and reports what it did for each major tag as a notice on the run and a line of the job's summary.
 - This repository moves `v1` with it, through `Self-Tag.yml`, once TagBot tags a release `vX.Y.Z`, with `tag_prefix: NO_PREFIX`, in place of `ReleaseFlow-vX.Y.Z`, and with the ReleaseFlow app's token, which the ruleset on `v*` tags lets through; so the workflows' callers get a release once ReleaseFlow's is registered.
+- The reusable workflow `dependents.yml`, which runs the tests of the packages that depend on this one, each checked out at its default branch, with the pull request's branch in its place, as the checks `dependents / <repository>`.
 
 ## [1.0.1] - 2026-10-20
 
