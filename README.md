@@ -54,7 +54,7 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
-    # A GitHub App's ID and private key, or a personal access token, so that the pull request's checks run; see below.
+    # The ReleaseFlow app's client ID and private key, or a personal access token, so that the pull request's checks run; see below.
     secrets:
       RELEASEFLOW_APP_CLIENT_ID: ${{ secrets.RELEASEFLOW_APP_CLIENT_ID }}
       RELEASEFLOW_APP_PRIVATE_KEY: ${{ secrets.RELEASEFLOW_APP_PRIVATE_KEY }}
@@ -105,6 +105,40 @@ jobs:
 Each dependent is checked out at its default branch, and its tests run as the check `dependents / <repository>`, with `julia-version`, `1` unless given.
 A breaking release is expected to break its dependents until they adapt, so whether a ruleset requires these checks is the maintainers' choice; without that, they report what a release would break before it's registered.
 A dependent whose project takes the package from a local path, through `[sources]`, tests against that path instead.
+
+And the release, in `.github/workflows/Release.yml`, started by hand from the Actions tab, which prepares a release or a hotfix and opens its pull request:
+
+```yaml
+name: Release
+on:
+  workflow_dispatch:
+    inputs:
+      kind:
+        type: choice
+        options: [release, hotfix]
+      step:
+        type: choice
+        options: [auto, patch, minor, major]
+permissions: {}
+jobs:
+  release:
+    uses: BioJulia/Workflows/.github/workflows/release.yml@v1
+    permissions:
+      contents: read
+    with:
+      model: gitflow   # or oneflow, or trunk
+      kind: ${{ inputs.kind }}
+      step: ${{ inputs.step }}
+    secrets:
+      RELEASEFLOW_APP_CLIENT_ID: ${{ secrets.RELEASEFLOW_APP_CLIENT_ID }}
+      RELEASEFLOW_APP_PRIVATE_KEY: ${{ secrets.RELEASEFLOW_APP_PRIVATE_KEY }}
+      RELEASEFLOW_TOKEN: ${{ secrets.RELEASEFLOW_TOKEN }}
+```
+
+It starts a release from `develop` under gitflow, and from the main branch otherwise, and a hotfix from the main branch, or under OneFlow from the last release's tag.
+On a new branch, `release/vX.Y.Z` or `hotfix/vX.Y.Z`, it sets the version in `Project.toml`, moves the changelog's unreleased entries into a dated `## [X.Y.Z]` section with its comparison links, and, with `pin-action`, sets that action's `uses: …@vX.Y.Z` pins in the workflows; then it opens the pull request into the main branch, which the checks pass.
+The step `auto` reads the unreleased section: a `### Breaking` subsection takes a breaking version, the next major version, or below 1.0 the next minor; `### Added` takes the next minor version; anything else, the next patch.
+A hotfix is always the next patch, and its section waits for the fix's entry, so its pull request is a draft until the fix is pushed.
 
 OneFlow and trunk, in `.github/workflows/OneFlow.yml` or `.github/workflows/Trunk.yml`:
 
@@ -162,16 +196,21 @@ A package can follow the major tag, `v1`, or pin a release, such as `v1.0.0`; De
 | Input | Default | Workflows | Meaning |
 |:--|:--|:--|:--|
 | `main-branch` | `main` | all | The branch of releases. |
-| `develop-branch` | `develop` | gitflow, back-merge | The branch of unreleased work. |
+| `develop-branch` | `develop` | gitflow, back-merge, release | The branch of unreleased work. |
 | `from` | the main branch | back-merge | The branch to bring. |
 | `into` | the develop branch | back-merge | The branch to bring it into. |
 | `skip-label` | `skip changelog` | gitflow, oneflow, trunk | The label that exempts a pull request from the changelog entry. |
 | `check-links` | `true` | gitflow, oneflow, trunk | Whether to check the changelog's comparison links. |
 | `require-entry` | `true` | trunk | Whether a pull request that isn't a release must add a changelog entry, for a changelog without an unreleased section. |
-| `project` | the root | gitflow, back-merge, oneflow, trunk, dependents | The package's directory, for a package in a subdirectory, such as `lib/Toy`. |
-| `registry` | `General` | gitflow, oneflow, trunk | The registry of the package's releases. |
+| `project` | the root | gitflow, back-merge, oneflow, trunk, dependents, release | The package's directory, for a package in a subdirectory, such as `lib/Toy`. |
+| `registry` | `General` | gitflow, oneflow, trunk, release | The registry of the package's releases. |
 | `dependents` | none | dependents | The repositories of the packages that depend on this one, one per line or separated by commas. |
 | `julia-version` | `1` | dependents | The version of Julia that the dependents' tests run on. |
+| `model` | `gitflow` | release | The branching model, `gitflow`, `oneflow` or `trunk`. |
+| `kind` | `release` | release | A release, or a hotfix. |
+| `step` | `auto` | release | The step of the version, `auto`, `patch`, `minor` or `major`. |
+| `pin-action` | none | release | An action whose pins in the workflows take the new version, such as `BioJulia/Workflows` for this repository. |
+| `environment` | `releaseflow` | back-merge, release | The deployment environment that holds the secrets. |
 
 For example, `with: { main-branch: master }` for a repository whose main branch is `master`.
 
@@ -185,12 +224,12 @@ For example, `with: { main-branch: master }` for a repository whose main branch 
   The checks that don't apply to a pull request are skipped, and GitHub counts a skipped check as passed, so a ruleset can require all of them.
   GitHub only offers a check's name once it has run, and only enforces rulesets on a private repository with a paid plan.
 - **The label.** Create the `skip changelog` label, for changes that users won't notice.
-- **The ReleaseFlow credentials.** Pull requests opened with the default `GITHUB_TOKEN` don't start workflows, so their checks would never report.
-  The back-merge opens them with another token, in order of preference:
-  - a GitHub App's, which it creates for each run from the secrets `RELEASEFLOW_APP_CLIENT_ID` and `RELEASEFLOW_APP_PRIVATE_KEY`, as described in [Creating the ReleaseFlow app](#creating-the-releaseflow-app);
+- **The ReleaseFlow credentials.** Pull requests opened with the default `GITHUB_TOKEN` don't start workflows, so their checks would never report, and it can't push workflow files.
+  The release and back-merge workflows use another token, in order of preference:
+  - the ReleaseFlow app's, which they create for each run from the secrets `RELEASEFLOW_APP_CLIENT_ID` and `RELEASEFLOW_APP_PRIVATE_KEY`, as described in [Creating the ReleaseFlow app](#creating-the-releaseflow-app);
   - a fine-grained personal access token, in the secret `RELEASEFLOW_TOKEN`, as described in [Creating the ReleaseFlow token](#creating-the-releaseflow-token).
 
-  Without either, the back-merge pull request says to close and reopen it, which starts the checks.
+  The release needs one of them; without either, the back-merge pull request says to close and reopen it, which starts the checks.
   Keep these secrets in the repository's `releaseflow` environment, as described in [The ReleaseFlow environment](#the-releaseflow-environment).
   Either way, allow GitHub Actions to create pull requests, in the repository's Settings → Actions → General → Workflow permissions → "Allow GitHub Actions to create and approve pull requests".
 - **Code owners.** A pull request runs its own copy of its workflow files, so a `CODEOWNERS` entry for `/.github/`, such as `/.github/ @<organization>/maintainers` in `.github/CODEOWNERS`, with the ruleset requiring a code owner's review, keeps a pull request from changing which checks it runs.
@@ -199,39 +238,33 @@ For example, `with: { main-branch: master }` for a repository whose main branch 
 ### The ReleaseFlow environment
 
 Any workflow that runs in a repository can read its repository and organization secrets, whatever its branch: anyone who can push a branch, or run a workflow from one, could read the ReleaseFlow credentials with a workflow of their own.
-An environment's secrets reach only the jobs on the branches that the environment allows, so the back-merge job runs in the environment `releaseflow`, which its input `environment` names:
+An environment's secrets reach only the jobs on the branches that the environment allows, so the release and back-merge jobs run in the environment that their input `environment` names, `releaseflow`:
 
 1. Open the repository's Settings → Environments, and choose "New environment", named `releaseflow`.
-2. Under "Deployment branches and tags", choose "Selected branches and tags", and add a rule for the main branch only, such as `master`.
-   For the tag workflow, add rules for the repository's default branch, such as `develop`, and for tags matching `v*`, whose ruleset limits who can make them.
-3. Under "Environment secrets", add the back-merge's secrets: `RELEASEFLOW_APP_CLIENT_ID` and `RELEASEFLOW_APP_PRIVATE_KEY` for an app, or `RELEASEFLOW_TOKEN` for a personal access token.
+2. Under "Deployment branches and tags", choose "Selected branches and tags", and add rules for the main branch, such as `master`, where the back-merge runs; the branch that releases are started from in the Actions tab, such as `develop`, the default branch, where the tag workflow runs too; and tags matching `v*`, on which the tag workflow runs, whose ruleset limits who can make them.
+3. Under "Environment secrets", add the ReleaseFlow credentials: `RELEASEFLOW_APP_CLIENT_ID` and `RELEASEFLOW_APP_PRIVATE_KEY` for the app, or `RELEASEFLOW_TOKEN` for a personal access token.
 
 GitHub uses the environment's secrets in place of secrets of the same name that the caller passes, so the caller needs no change.
-Without the environment, GitHub creates it unprotected on the first run, and the back-merge works with repository or organization secrets, without that protection.
+Without the environment, GitHub creates it unprotected on the first run, and the workflows work with repository or organization secrets, without that protection.
 
 ### Creating the ReleaseFlow app
 
-A GitHub App belongs to the organization rather than to a person, so the pull requests it opens come from its bot, `<app>[bot]`, which any maintainer can approve, and its tokens last an hour, so there's nothing to renew.
-One app serves every repository of the organization that uses the back-merge workflow.
+A GitHub App belongs to the organization rather than to a person, so the branches and pull requests it opens come from its bot, `<app>[bot]`, which any maintainer can approve, and its tokens last an hour, so there's nothing to renew.
+One app serves every repository of the organization that uses the release or back-merge workflow.
 
 1. Open the organization's Settings → Developer settings → GitHub Apps, and choose "New GitHub App".
 2. Name it, such as `<organization> ReleaseFlow`, which must be unique on GitHub, and give its homepage URL, such as the organization's page.
 3. Under Webhook, clear "Active": the workflow calls the app, rather than the app listening for events.
 4. Under repository permissions, set:
-   - Pull requests: Read and write, to open the pull request.
-
-   The job's own token creates the `back-merge/vX.Y.Z` branch, so nothing more is needed.
-   GitHub may refuse the job's token that branch, when its workflow files differ from the default branch's, since that token can't have access to workflows; the workflow then logs the refusal and creates the branch with this token instead, which then also needs:
-   - Contents: Read and write, to create the branch;
-   - Workflows: Read and write, for the branch's workflow files.
-
-   Add those two only if a back-merge's log shows that refusal.
-   For the tag workflow, the app needs Contents: Read and write, to move the major tags.
+   - Contents: Read and write, to push a release's branch, and for the tag workflow, to move the major tags;
+   - Pull requests: Read and write, to open the pull request;
+   - Workflows: Read and write, since a release's branch may change workflow files, such as an action's pins.
 
    Metadata: Read-only is added by itself; leave every other permission at no access.
+   A repository that only back-merges can give Pull requests alone, since the back-merge's job creates its branch with its own token, unless GitHub refuses it, which its log then says.
 5. Under "Where can this GitHub App be installed?", choose "Only on this account", and choose "Create GitHub App".
 6. On the app's page, note its Client ID, and under Private keys choose "Generate a private key", which downloads a `.pem` file.
-7. Choose "Install App", install it on the organization, and choose "Only select repositories", with the repositories that use the back-merge workflow.
+7. Choose "Install App", install it on the organization, and choose "Only select repositories", with the repositories that use the release or back-merge workflow.
 8. In each repository's `releaseflow` environment, add two environment secrets:
    - `RELEASEFLOW_APP_CLIENT_ID`, the Client ID;
    - `RELEASEFLOW_APP_PRIVATE_KEY`, the whole contents of the `.pem` file, from `-----BEGIN RSA PRIVATE KEY-----` to `-----END RSA PRIVATE KEY-----`.
@@ -239,34 +272,20 @@ One app serves every repository of the organization that uses the back-merge wor
    Then delete the downloaded file; a new key can be generated if it's lost, and a key can be revoked on the app's page if it leaks.
 
 The caller passes both secrets to the reusable workflow, which creates the app's token for its repository with `actions/create-github-app-token`.
-To check it, run the caller's Back-merge workflow from the Actions tab, with "Run workflow": it opens the pull request as `<app>[bot]` if `develop` lacks the main branch's commit, and its checks start.
+To check it, run the caller's Release workflow from the Actions tab: it pushes `release/vX.Y.Z` and opens its pull request as `<app>[bot]`, and its checks start.
 
 ### Creating the ReleaseFlow token
 
 Where a GitHub App can't be created, such as for a repository of a personal account, a fine-grained personal access token does the same, in the secret `RELEASEFLOW_TOKEN`.
-The back-merge workflow uses it to open its pull request.
-GitHub shows the token's owner as the pull request's author, so prefer a maintainers' machine account, such as a bot account of the organization, to a person's: an author can't approve their own pull request, and the token outlives a maintainer's involvement.
+GitHub shows the token's owner as the author of the branches and pull requests, so prefer a maintainers' machine account, such as a bot account of the organization, to a person's: an author can't approve their own pull request, and the token outlives a maintainer's involvement.
 
 1. Signed in as the token's owner, open Settings → Developer settings → Personal access tokens → Fine-grained tokens, and choose "Generate new token".
 2. Name it, such as `RELEASEFLOW_TOKEN for <organization>`, and set an expiration; the organization may cap it, and the token must be regenerated and the secret updated before it expires.
 3. Set the resource owner to the organization that owns the repositories, rather than the account; an organization that reviews fine-grained tokens holds it as pending until an owner approves it, in the organization's Settings → Personal access tokens → Pending requests.
-4. Under repository access, choose "Only select repositories", and select the repositories that use the back-merge workflow.
-5. Under repository permissions, set:
-   - Pull requests: Read and write, to open the pull request.
-
-   The job's own token creates the `back-merge/vX.Y.Z` branch, so nothing more is needed.
-   GitHub may refuse the job's token that branch, when its workflow files differ from the default branch's, since that token can't have access to workflows; the workflow then logs the refusal and creates the branch with this token instead, which then also needs:
-   - Contents: Read and write, to create the branch;
-   - Workflows: Read and write, for the branch's workflow files.
-
-   Add those two only if a back-merge's log shows that refusal.
-
-   Metadata: Read-only is added by itself; leave every other permission at no access.
+4. Under repository access, choose "Only select repositories", and select the repositories that use the release or back-merge workflow.
+5. Under repository permissions, set Contents, Pull requests and Workflows to Read and write, as for the app.
 6. Choose "Generate token", and copy it; GitHub shows it only once.
 7. Store it as an environment secret named `RELEASEFLOW_TOKEN`, in each repository's `releaseflow` environment.
-
-The caller passes the secret to the reusable workflow, as `secrets: RELEASEFLOW_TOKEN: ${{ secrets.RELEASEFLOW_TOKEN }}`; the token never needs to appear anywhere else.
-To check it, run the caller's Back-merge workflow from the Actions tab, with "Run workflow": it opens the pull request if `develop` lacks the main branch's commit, and its checks start.
 
 ## The checks
 
@@ -314,7 +333,7 @@ This repository follows gitflow, with `master` and `develop`, and checks its own
 The workflows and ReleaseFlow share one version, in `ReleaseFlow/Project.toml`, and one changelog.
 The reusable workflows call the action at the release that they belong to, such as `BioJulia/Workflows@v1.0.0`, so that a workflow and its checks come from one release; the CI's Pins check holds them to it.
 
-A release or hotfix branch:
+A release or hotfix branch, which `Self-Release.yml` prepares from the Actions tab:
 1. sets its version in `ReleaseFlow/Project.toml`;
 2. sets every `uses: BioJulia/Workflows@…` in `.github/workflows/` to that version, `vX.Y.Z`;
 3. moves the changelog's unreleased entries into a `## [X.Y.Z]` section, with its comparison link.
