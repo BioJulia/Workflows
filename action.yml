@@ -33,6 +33,9 @@ inputs:
   check-links:
     description: Whether to check the changelog's comparison links.
     default: 'true'
+  project:
+    description: The package's directory, relative to the repository's root, for a package in a subdirectory.
+    default: ''
   registry:
     description: The registry whose records give the commits of releases.
     default: General
@@ -62,6 +65,7 @@ runs:
         SKIP_LABEL: ${{ inputs.skip-label }}
         SKIP_CHANGELOG: ${{ contains(github.event.pull_request.labels.*.name, inputs.skip-label) }}
         CHECK_LINKS: ${{ inputs.check-links }}
+        PROJECT: ${{ inputs.project }}
         REGISTRY: ${{ inputs.registry }}
       run: |
         export BASE_REF="${BASE_REF_INPUT:-origin/$BASE_BRANCH}"
