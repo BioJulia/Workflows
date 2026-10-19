@@ -33,16 +33,17 @@ into_develop(settings::Settings{Gitflow}, branch::ReleaseOrHotfix) = failure(set
 into_develop(settings::Settings{Gitflow}, branch::Branch) = println("$(settings.develop_branch) takes the merge of $(branch.name).")
 
 # OneFlow: the main branch takes any branch; a hotfix branches from the last release's tag, and a release carries the main branch's work since then.
-function into_main(settings::Settings{OneFlow}, branch::ReleaseOrHotfix)
-    release = last_release(settings)
-    if release === nothing || release isa LastRelease{MainBranch}
-        note("There's no earlier release, so where $(branch.name) came from isn't checked.")
-    else
-        println("$(settings.main_branch) takes the merge of $(branch.name), a release or hotfix branch.")
-        check_origin(settings, branch, settings.base_ref, settings.main_branch, release.ref, "the release $(release.version), v$(release.version)")
-    end
+into_main(settings::Settings{OneFlow}, branch::ReleaseOrHotfix) = oneflow_origin(settings, branch, last_release(settings))
+
+function oneflow_origin(settings::Settings{OneFlow}, branch::ReleaseOrHotfix, release::LastRelease)
+    println("$(settings.main_branch) takes the merge of $(branch.name), a release or hotfix branch.")
+    check_origin(settings, branch, settings.base_ref, settings.main_branch, release.ref, "the release $(release.version), v$(release.version)")
     return
 end
+
+# Without a released commit, there's nothing to measure where the branch came from against.
+oneflow_origin(settings::Settings{OneFlow}, branch::ReleaseOrHotfix, ::LastRelease{MainBranch}) = note("The last release has no commit of its own, so where $(branch.name) came from isn't checked.")
+oneflow_origin(settings::Settings{OneFlow}, branch::ReleaseOrHotfix, ::InitialRelease) = note("This is the initial release, so where $(branch.name) came from isn't checked.")
 
 into_main(settings::Settings{OneFlow}, branch::Branch) = println("$(settings.main_branch) takes the merge of $(branch.name).")
 

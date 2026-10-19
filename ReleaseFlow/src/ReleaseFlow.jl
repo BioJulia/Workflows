@@ -13,9 +13,10 @@ Checks of the pull requests of a Julia package, under one of three branching mod
 A release takes the next version, a changelog section that describes it, and, if it breaks the last release, a breaking version and a `### Breaking` subsection.
 A change is breaking if the last release's public API is no longer provided, if its tests fail, or if a compat bound no longer admits every version that it did.
 The last release is the main branch's version, at the commit that the registry records for it, cross-checked with its tag `vX.Y.Z`; gitflow compares with the main branch itself, which holds only releases.
+Where the main branch has no version, the pull request is the initial release, which takes a standard first version, 0.0.1, 0.1.0 or X.0.0, follows no version that the registry records or that a tag names, has a changelog of its own section only, and comes from a release branch rather than a hotfix.
 Git doesn't record which branch a branch was made from, only its commits, so the rules about origins look at the commits.
 
-Each check is a method of `check(::C, ::Settings{M})`; the rules that differ between models dispatch on the model `M`, those that differ between kinds of branch on the kind `K` of a `Branch{K}`, and those that differ by where the last release was found on the source `S` of a `LastRelease{S}`.
+Each check is a method of `check(::C, ::Settings{M})`; the rules that differ between models dispatch on the model `M`, those that differ between kinds of branch on the kind `K` of a `Branch{K}`, and those that differ by the release that the pull request is measured against on its `Baseline`: a `LastRelease{S}`, found from the source `S`, or the `InitialRelease`.
 
 Run from the root of the package's repository with `julia -m ReleaseFlow source|version|changelog|breaking|entry|is-release`, or call [`main`](@ref).
 Inputs are environment variables, so that branch names never reach a shell, and an empty one counts as missing:

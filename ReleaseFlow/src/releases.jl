@@ -12,20 +12,27 @@ struct Tagged <: Source end
 "A release that is the main branch itself: under gitflow, or before a package is registered or tagged."
 struct MainBranch <: Source end
 
+"The release that a pull request is measured against: the last release, or none, for the package's initial release."
+abstract type Baseline end
+
 "The last release, found from the source `S`: its version, and the commit to compare with."
-struct LastRelease{S <: Source}
+struct LastRelease{S <: Source} <: Baseline
     version::VersionNumber
     ref::String
 end
 
+"No earlier release: the pull request releases the package for the first time, which takes its own rules."
+struct InitialRelease <: Baseline end
+
 label(release::LastRelease) = "the release $(release.version)"
 label(release::LastRelease{MainBranch}) = release.ref
+label(::InitialRelease) = "no earlier release"
 
-# The last release, or `nothing` before the first.
+# The baseline of the pull request: the last release, or, where the main branch has no version, as before the first release, the initial release.
 last_release(settings::Settings) = found!(settings, :last_release) do
-    has_base(settings) || return nothing
+    has_base(settings) || return InitialRelease()
     version = base_version(settings)
-    version === nothing ? nothing : find_last_release(settings, version)
+    version === nothing ? InitialRelease() : find_last_release(settings, version)
 end
 
 # Gitflow compares with the main branch, which holds only releases.
@@ -41,7 +48,7 @@ function find_last_release(settings::Settings, version)
         commit = commit_with_tree(settings, tree)
         if commit === nothing
             failure(settings, "Release", "$(name) records the tree $(tree) for $(version), but no branch or tag has a commit with it; fetch the whole history, or tag the release.")
-            return nothing
+            return LastRelease{MainBranch}(version, settings.base_ref)
         end
         if tagged && package_tree(settings, tag) != tree
             failure(settings, "Release", "The tag $(tag) isn't the release of $(version) that $(name) records: its tree is $(package_tree(settings, tag)), but the registered tree is $(tree), of the commit $(commit); move the tag.")
