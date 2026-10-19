@@ -66,4 +66,4 @@ runs:
       run: |
         export BASE_REF="${BASE_REF_INPUT:-origin/$BASE_BRANCH}"
         export DEVELOP_REF="origin/$DEVELOP_BRANCH"
-        julia --startup-file=no --project="$GITHUB_ACTION_PATH/ReleaseChecks" "$GITHUB_ACTION_PATH/ReleaseChecks/main.jl" "$CHECK"
+        julia --startup-file=no --project="$GITHUB_ACTION_PATH/ReleaseChecks" -m ReleaseChecks "$CHECK"

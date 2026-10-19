@@ -17,7 +17,7 @@ Git doesn't record which branch a branch was made from, only its commits, so the
 
 Each check is a method of `check(::C, ::Settings{M})`; the rules that differ between models dispatch on the model `M`, those that differ between kinds of branch on the kind `K` of a `Branch{K}`, and those that differ by where the last release was found on the source `S` of a `LastRelease{S}`.
 
-Run from the root of the package's repository with `julia --project=<Workflows>/ReleaseChecks <Workflows>/ReleaseChecks/main.jl source|version|changelog|breaking|entry|release`, or call [`main`](@ref).
+Run from the root of the package's repository with `julia -m ReleaseChecks source|version|changelog|breaking|entry|release`, or call [`main`](@ref).
 Inputs are environment variables, so that branch names never reach a shell, and an empty one counts as missing:
 - `MODEL`, `gitflow`, `oneflow` or `trunk`, `gitflow` unless given;
 - `MAIN_BRANCH` and `DEVELOP_BRANCH`, `master` and `develop` unless given;
@@ -54,14 +54,15 @@ include("checks/entry.jl")
 include("checks/release.jl")
 include("checks/breaking.jl")
 
-const USAGE = "usage: MODEL=$(join(sort(collect(keys(MODELS))), '|')) julia --project=ReleaseChecks ReleaseChecks/main.jl $(join(sort(collect(keys(CHECKS))), '|'))"
+const USAGE = "usage: MODEL=$(join(sort(collect(keys(MODELS))), '|')) julia -m ReleaseChecks $(join(sort(collect(keys(CHECKS))), '|'))"
 
 """
     main(arguments; environment = ENV, root = pwd()) -> Int
 
 Run the check named by the one argument in `arguments` on the repository at `root`, with the inputs in `environment`, and return the exit code: `0` where it passes, `1` where it fails, and `2` for a wrong argument or model.
+It's the package's entry point, so `julia -m ReleaseChecks source` runs the check `source` in the current directory.
 """
-function main(arguments = ARGS; environment = ENV, root = pwd())
+function (@main)(arguments = ARGS; environment = ENV, root = pwd())
     if length(arguments) != 1 || !haskey(CHECKS, arguments[1]) || !haskey(MODELS, input(environment, "MODEL", "gitflow"))
         println(stderr, USAGE)
         return 2

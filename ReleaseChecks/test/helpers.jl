@@ -1,7 +1,6 @@
-# Helpers of the end-to-end tests: git repositories of a toy package, `Toy`, in temporary directories, a scratch registry, and running `ReleaseChecks/main.jl` in them, as the workflows do.
+# Helpers of the end-to-end tests: git repositories of a toy package, `Toy`, in temporary directories, a scratch registry, and running `julia -m ReleaseChecks` in them, as the workflows do.
 
-const CHECKS = normpath(joinpath(@__DIR__, ".."))
-const MAIN = joinpath(CHECKS, "main.jl")
+const PACKAGE = normpath(joinpath(@__DIR__, ".."))
 const UUID = "6d8a9f4e-1b2c-4d3e-8f5a-0b1c2d3e4f5a"
 const URL = "https://github.com/Example/Toy.jl"
 
@@ -135,7 +134,7 @@ function check(directory, name; variables...)
         environment[string(key)] = string(value)
     end
     output = IOBuffer()
-    command = Cmd(addenv(`$(Base.julia_cmd()) --startup-file=no --project=$(CHECKS) $(MAIN) $(name)`, environment); dir = directory, ignorestatus = true)
+    command = Cmd(addenv(`$(Base.julia_cmd()) --startup-file=no --project=$(PACKAGE) -m ReleaseChecks $(name)`, environment); dir = directory, ignorestatus = true)
     process = run(pipeline(command; stdout = output, stderr = output))
     return (code = process.exitcode, output = String(take!(output)))
 end

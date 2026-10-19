@@ -7,11 +7,20 @@ The workflows' README describes the models, what each check does, and how to set
 
 ## Running a check
 
-From the root of a package's repository, with a clone of BioJulia/Workflows:
+Install ReleaseChecks in a shared environment of its own, so that it doesn't enter a package's project:
 
 ```bash
-MODEL=gitflow BASE_BRANCH=master HEAD_REF=release/v0.2.0 julia --project=path/to/Workflows/ReleaseChecks path/to/Workflows/ReleaseChecks/main.jl source
+julia --project=@ReleaseChecks -e 'using Pkg; Pkg.add("ReleaseChecks")'
 ```
+
+Then run a check, which is the package's entry point, from the root of a package's repository:
+
+```bash
+MODEL=gitflow BASE_BRANCH=master HEAD_REF=release/v0.2.0 julia --project=@ReleaseChecks -m ReleaseChecks source
+```
+
+From a clone of BioJulia/Workflows, `--project=path/to/Workflows/ReleaseChecks` runs the clone's copy instead.
+`julia -m` needs Julia 1.12 or later.
 
 The checks are `source`, `version`, `changelog`, `breaking`, `entry` and `release`; the exit code is `0` where the check passes, `1` where it fails, with the failures as GitHub Actions annotations, and `2` for a wrong check or model.
 

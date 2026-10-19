@@ -2,7 +2,7 @@
 # ===================
 #
 # The unit tests call ReleaseChecks' functions directly.
-# The end-to-end tests build git repositories of a toy package, `Toy`, in temporary directories, and run `ReleaseChecks/main.jl` in them, as the workflows do, with a scratch registry, so that the tests need no network.
+# The end-to-end tests build git repositories of a toy package, `Toy`, in temporary directories, and run `julia -m ReleaseChecks` in them, as the workflows do, with a scratch registry, so that the tests need no network.
 
 using Test
 using ReleaseChecks
