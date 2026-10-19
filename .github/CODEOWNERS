@@ -1,0 +1,3 @@
+# The workflows and the action decide which checks every pull request runs, here and in the repositories that call them, so a change to them needs a maintainer's review.
+/.github/ @BioJulia/maintainers
+/action.yml @BioJulia/maintainers

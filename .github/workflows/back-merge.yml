@@ -12,16 +12,18 @@
 #         contents: write
 #         pull-requests: write
 #       secrets:
-#         BACK_MERGE_APP_ID: ${{ secrets.BACK_MERGE_APP_ID }}
+#         BACK_MERGE_APP_CLIENT_ID: ${{ secrets.BACK_MERGE_APP_CLIENT_ID }}
 #         BACK_MERGE_APP_PRIVATE_KEY: ${{ secrets.BACK_MERGE_APP_PRIVATE_KEY }}
 #
 # The pull request comes from a branch back-merge/vX.Y.Z at the main branch's commit, so that a conflict with develop is resolved on that branch, by merging develop into it, without pushing to the main branch.
 # Pull requests opened with the default GITHUB_TOKEN don't start workflows, so their required checks would never report.
 # Another token avoids that, with read and write access to pull requests, while the job's own token creates the branch; where GitHub refuses the job's token that branch, because its workflow files differ, the other token creates it, and then needs read and write access to contents and workflows too:
-# - a GitHub App's, created for each run from the secrets BACK_MERGE_APP_ID and BACK_MERGE_APP_PRIVATE_KEY, which opens the pull request as the app's bot;
+# - a GitHub App's, created for each run from the secrets BACK_MERGE_APP_CLIENT_ID and BACK_MERGE_APP_PRIVATE_KEY, which opens the pull request as the app's bot;
 # - or the secret BACK_MERGE_TOKEN, a fine-grained personal access token, which opens it as the token's owner.
 # Without either, the default token opens the pull request, which says to close and reopen it, so that the checks run.
 # Either way, the repository must allow GitHub Actions to create pull requests, in Settings → Actions → General.
+#
+# The job runs in the deployment environment `environment`, `back-merge` unless given: keep the secrets there, as environment secrets, and limit the environment to the main branch, so that a workflow on any other branch can't read them.
 name: Back-merge
 
 on:
@@ -39,9 +41,13 @@ on:
         description: The package's directory, relative to the repository's root, whose Project.toml gives the version, for a package in a subdirectory.
         type: string
         default: ''
+      environment:
+        description: The deployment environment that holds the secrets, limited to the main branch.
+        type: string
+        default: back-merge
     secrets:
-      BACK_MERGE_APP_ID:
-        description: The ID of a GitHub App, installed on the repository, whose token opens the pull request so that its checks run.
+      BACK_MERGE_APP_CLIENT_ID:
+        description: The client ID of a GitHub App, installed on the repository, whose token opens the pull request so that its checks run.
         required: false
       BACK_MERGE_APP_PRIVATE_KEY:
         description: A private key of that GitHub App.
@@ -59,26 +65,28 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
+    # The environment's secrets reach only jobs on the branches that the environment allows; GitHub uses them in place of secrets of the same name that the caller passes.
+    environment: ${{ inputs.environment }}
     # One back-merge at a time, so that two pushes to the main branch don't race to open the same pull request.
     concurrency:
       group: back-merge-${{ github.repository }}
       cancel-in-progress: false
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ inputs.main-branch }}
           fetch-depth: 0
       # Secrets can't be tested in a step's condition, so this step tells whether a GitHub App is given.
       - id: app-given
         env:
-          APP_ID: ${{ secrets.BACK_MERGE_APP_ID }}
-        run: echo "given=$([ -n "$APP_ID" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+          CLIENT_ID: ${{ secrets.BACK_MERGE_APP_CLIENT_ID }}
+        run: echo "given=$([ -n "$CLIENT_ID" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
       # The app's installation token, for this repository, which lasts an hour.
       - id: app
         if: steps.app-given.outputs.given == 'true'
-        uses: actions/create-github-app-token@v2
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
         with:
-          app-id: ${{ secrets.BACK_MERGE_APP_ID }}
+          client-id: ${{ secrets.BACK_MERGE_APP_CLIENT_ID }}
           private-key: ${{ secrets.BACK_MERGE_APP_PRIVATE_KEY }}
       - name: Open the pull request from the main branch into develop
         env:

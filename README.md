@@ -56,7 +56,7 @@ jobs:
       pull-requests: write
     # A GitHub App's ID and private key, or a personal access token, so that the pull request's checks run; see below.
     secrets:
-      BACK_MERGE_APP_ID: ${{ secrets.BACK_MERGE_APP_ID }}
+      BACK_MERGE_APP_CLIENT_ID: ${{ secrets.BACK_MERGE_APP_CLIENT_ID }}
       BACK_MERGE_APP_PRIVATE_KEY: ${{ secrets.BACK_MERGE_APP_PRIVATE_KEY }}
       BACK_MERGE_TOKEN: ${{ secrets.BACK_MERGE_TOKEN }}
 ```
@@ -105,13 +105,26 @@ For example, `with: { main-branch: main }` for a gitflow repository whose main b
 - **The label.** Create the `skip changelog` label, for changes that users won't notice.
 - **The back-merge's credentials.** Pull requests opened with the default `GITHUB_TOKEN` don't start workflows, so their checks would never report.
   The back-merge opens them with another token, in order of preference:
-  - a GitHub App's, which it creates for each run from the secrets `BACK_MERGE_APP_ID` and `BACK_MERGE_APP_PRIVATE_KEY`, as described in [Creating the back-merge app](#creating-the-back-merge-app);
+  - a GitHub App's, which it creates for each run from the secrets `BACK_MERGE_APP_CLIENT_ID` and `BACK_MERGE_APP_PRIVATE_KEY`, as described in [Creating the back-merge app](#creating-the-back-merge-app);
   - a fine-grained personal access token, in the secret `BACK_MERGE_TOKEN`, as described in [Creating the back-merge token](#creating-the-back-merge-token).
 
   Without either, the back-merge pull request says to close and reopen it, which starts the checks.
+  Keep these secrets in the repository's `back-merge` environment, as described in [The back-merge environment](#the-back-merge-environment).
   Either way, allow GitHub Actions to create pull requests, in the repository's Settings → Actions → General → Workflow permissions → "Allow GitHub Actions to create and approve pull requests".
-- **Code owners.** A pull request runs its own copy of its workflow files, so a `CODEOWNERS` entry for `/.github/workflows/`, with the ruleset requiring a code owner's review, keeps a pull request from changing which checks it runs.
+- **Code owners.** A pull request runs its own copy of its workflow files, so a `CODEOWNERS` entry for `/.github/`, such as `/.github/ @<organization>/maintainers` in `.github/CODEOWNERS`, with the ruleset requiring a code owner's review, keeps a pull request from changing which checks it runs.
 - **Forks.** The checks look at the pull request's head commit and this repository's branches, so they work the same for pull requests from forks; GitHub asks a maintainer to approve the workflows of a first-time contributor.
+
+### The back-merge environment
+
+Any workflow that runs in a repository can read its repository and organization secrets, whatever its branch: anyone who can push a branch, or run a workflow from one, could read the back-merge's credentials with a workflow of their own.
+An environment's secrets reach only the jobs on the branches that the environment allows, so the back-merge job runs in the environment `back-merge`, which its input `environment` names:
+
+1. Open the repository's Settings → Environments, and choose "New environment", named `back-merge`.
+2. Under "Deployment branches and tags", choose "Selected branches and tags", and add a rule for the main branch only, such as `master`.
+3. Under "Environment secrets", add the back-merge's secrets: `BACK_MERGE_APP_CLIENT_ID` and `BACK_MERGE_APP_PRIVATE_KEY` for an app, or `BACK_MERGE_TOKEN` for a personal access token.
+
+GitHub uses the environment's secrets in place of secrets of the same name that the caller passes, so the caller needs no change.
+Without the environment, GitHub creates it unprotected on the first run, and the back-merge works with repository or organization secrets, without that protection.
 
 ### Creating the back-merge app
 
@@ -133,13 +146,13 @@ One app serves every repository of the organization that uses the back-merge wor
 
    Metadata: Read-only is added by itself; leave every other permission at no access.
 5. Under "Where can this GitHub App be installed?", choose "Only on this account", and choose "Create GitHub App".
-6. On the app's page, note its App ID, and under Private keys choose "Generate a private key", which downloads a `.pem` file.
+6. On the app's page, note its Client ID, and under Private keys choose "Generate a private key", which downloads a `.pem` file.
 7. Choose "Install App", install it on the organization, and choose "Only select repositories", with the repositories that use the back-merge workflow.
-8. In the organization's Settings → Secrets and variables → Actions, add two organization secrets, with access for the same repositories:
-   - `BACK_MERGE_APP_ID`, the App ID;
+8. In each repository's `back-merge` environment, add two environment secrets:
+   - `BACK_MERGE_APP_CLIENT_ID`, the Client ID;
    - `BACK_MERGE_APP_PRIVATE_KEY`, the whole contents of the `.pem` file, from `-----BEGIN RSA PRIVATE KEY-----` to `-----END RSA PRIVATE KEY-----`.
 
-   Then delete the downloaded file; a new key can be generated if it's lost.
+   Then delete the downloaded file; a new key can be generated if it's lost, and a key can be revoked on the app's page if it leaks.
 
 The caller passes both secrets to the reusable workflow, which creates the app's token for its repository with `actions/create-github-app-token`.
 To check it, run the caller's Back-merge workflow from the Actions tab, with "Run workflow": it opens the pull request as `<app>[bot]` if `develop` lacks the main branch's commit, and its checks start.
@@ -166,9 +179,7 @@ GitHub shows the token's owner as the pull request's author, so prefer a maintai
 
    Metadata: Read-only is added by itself; leave every other permission at no access.
 6. Choose "Generate token", and copy it; GitHub shows it only once.
-7. Store it as a secret named `BACK_MERGE_TOKEN`, in either:
-   - the repository's Settings → Secrets and variables → Actions → New repository secret, for one repository;
-   - the organization's Settings → Secrets and variables → Actions → New organization secret, with access for the selected repositories, so that one token serves every repository that uses the workflow.
+7. Store it as an environment secret named `BACK_MERGE_TOKEN`, in each repository's `back-merge` environment.
 
 The caller passes the secret to the reusable workflow, as `secrets: BACK_MERGE_TOKEN: ${{ secrets.BACK_MERGE_TOKEN }}`; the token never needs to appear anywhere else.
 To check it, run the caller's Back-merge workflow from the Actions tab, with "Run workflow": it opens the pull request if `develop` lacks the main branch's commit, and its checks start.
@@ -230,6 +241,11 @@ Once it merges into `master`:
 3. once General merges the registration, TagBot tags the commit `ReleaseChecks-vX.Y.Z`.
 
 A breaking change to a workflow's inputs, jobs or check names, or to ReleaseChecks' public API, takes a new major version, and a new major tag, such as `v2`.
+
+Every package that calls the workflows runs what their tags point to, so:
+- a ruleset on tags matching `v*` restricts who can create, move or delete them to the maintainers;
+- the workflows and the action pin the actions of other owners to commits, with their versions in comments, which Dependabot updates by pull request, labelled `skip changelog`;
+- `.github/CODEOWNERS` requires a maintainer's review of any change to the workflows or the action.
 
 The repository's own pull requests are checked by the released checks, at the action's pins, while CI tests the pull request's own.
 So the first release, `v1.0.0`, can't be checked before it's tagged: require the Gitflow checks in the rulesets of `master` and `develop` once it is.

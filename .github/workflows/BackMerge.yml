@@ -19,6 +19,6 @@ jobs:
       main-branch: master
       project: ReleaseChecks
     secrets:
-      BACK_MERGE_APP_ID: ${{ secrets.BACK_MERGE_APP_ID }}
+      BACK_MERGE_APP_CLIENT_ID: ${{ secrets.BACK_MERGE_APP_CLIENT_ID }}
       BACK_MERGE_APP_PRIVATE_KEY: ${{ secrets.BACK_MERGE_APP_PRIVATE_KEY }}
       BACK_MERGE_TOKEN: ${{ secrets.BACK_MERGE_TOKEN }}
