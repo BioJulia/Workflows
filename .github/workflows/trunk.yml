@@ -35,6 +35,10 @@ on:
         description: Whether to check the changelog's comparison links.
         type: boolean
         default: true
+      project:
+        description: The package's directory, relative to the repository's root, for a package in a subdirectory.
+        type: string
+        default: ''
       registry:
         description: The registry of the package's releases.
         type: string
@@ -59,6 +63,7 @@ jobs:
         with:
           check: is-release
           model: trunk
+          project: ${{ inputs.project }}
           main-branch: ${{ inputs.main-branch }}
 
   version:
@@ -76,6 +81,7 @@ jobs:
         with:
           check: version
           model: trunk
+          project: ${{ inputs.project }}
           main-branch: ${{ inputs.main-branch }}
           registry: ${{ inputs.registry }}
 
@@ -94,6 +100,7 @@ jobs:
         with:
           check: changelog
           model: trunk
+          project: ${{ inputs.project }}
           main-branch: ${{ inputs.main-branch }}
           check-links: ${{ inputs.check-links }}
           registry: ${{ inputs.registry }}
@@ -117,6 +124,7 @@ jobs:
         with:
           check: breaking
           model: trunk
+          project: ${{ inputs.project }}
           main-branch: ${{ inputs.main-branch }}
           registry: ${{ inputs.registry }}
 
@@ -135,5 +143,6 @@ jobs:
         with:
           check: entry
           model: trunk
+          project: ${{ inputs.project }}
           main-branch: ${{ inputs.main-branch }}
           skip-label: ${{ inputs.skip-label }}

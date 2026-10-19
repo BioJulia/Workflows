@@ -35,6 +35,10 @@ on:
         description: Whether to check the changelog's comparison links.
         type: boolean
         default: true
+      project:
+        description: The package's directory, relative to the repository's root, for a package in a subdirectory.
+        type: string
+        default: ''
       registry:
         description: The registry of the package's releases.
         type: string
@@ -57,6 +61,7 @@ jobs:
         with:
           check: source
           model: gitflow
+          project: ${{ inputs.project }}
           main-branch: ${{ inputs.main-branch }}
           develop-branch: ${{ inputs.develop-branch }}
 
@@ -74,6 +79,7 @@ jobs:
         with:
           check: version
           model: gitflow
+          project: ${{ inputs.project }}
           main-branch: ${{ inputs.main-branch }}
           develop-branch: ${{ inputs.develop-branch }}
           registry: ${{ inputs.registry }}
@@ -92,6 +98,7 @@ jobs:
         with:
           check: changelog
           model: gitflow
+          project: ${{ inputs.project }}
           main-branch: ${{ inputs.main-branch }}
           develop-branch: ${{ inputs.develop-branch }}
           check-links: ${{ inputs.check-links }}
@@ -115,6 +122,7 @@ jobs:
         with:
           check: breaking
           model: gitflow
+          project: ${{ inputs.project }}
           main-branch: ${{ inputs.main-branch }}
           develop-branch: ${{ inputs.develop-branch }}
 
@@ -132,6 +140,7 @@ jobs:
         with:
           check: entry
           model: gitflow
+          project: ${{ inputs.project }}
           main-branch: ${{ inputs.main-branch }}
           develop-branch: ${{ inputs.develop-branch }}
           skip-label: ${{ inputs.skip-label }}

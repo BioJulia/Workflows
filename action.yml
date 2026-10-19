@@ -33,6 +33,9 @@ inputs:
   check-links:
     description: Whether to check the changelog's comparison links.
     default: 'true'
+  project:
+    description: The package's directory, relative to the repository's root, for a package in a subdirectory.
+    default: ''
   registry:
     description: The registry whose records give the commits of releases.
     default: General
@@ -62,6 +65,7 @@ runs:
         RELEASEFLOW_SKIP_LABEL: ${{ inputs.skip-label }}
         RELEASEFLOW_SKIP_CHANGELOG: ${{ contains(github.event.pull_request.labels.*.name, inputs.skip-label) }}
         RELEASEFLOW_CHECK_LINKS: ${{ inputs.check-links }}
+        RELEASEFLOW_PROJECT: ${{ inputs.project }}
         RELEASEFLOW_REGISTRY: ${{ inputs.registry }}
       run: |
         export RELEASEFLOW_BASE_REF="${BASE_REF_INPUT:-origin/$RELEASEFLOW_BASE_BRANCH}"
