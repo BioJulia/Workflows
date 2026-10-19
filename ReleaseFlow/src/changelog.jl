@@ -59,6 +59,17 @@ entries(section::Section) = filter(is_entry, section.lines)
 
 unreleased_entries(sections) = (index = unreleased_index(sections); index === nothing ? String[] : entries(sections[index]))
 
+# The text of the section of `version` in a changelog's `text`, without its heading, or `nothing` where it has none.
+# A link's definition, such as `[0.2.0]: https://…`, which the last section's lines take in.
+is_link(line) = occursin(r"^\[[^\]]+\]:\s*\S+", line)
+
+function section_text(text, version)
+    parsed = sections(text)
+    index = findfirst(section -> is_version(section, version), parsed)
+    index === nothing && return nothing
+    return String(strip(join(filter(!is_link, parsed[index].lines), '\n')))
+end
+
 # The entries of the subsection `title`, such as `### Breaking`, of `section`.
 function subsection_entries(section::Section, title)
     inside = false
