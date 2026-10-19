@@ -1,7 +1,7 @@
 #!/bin/bash
 # The reusable workflows call this repository's action at the release that they belong to, so that a workflow and its checks always come from one release.
 # Every such reference must name the same release.
-# The repository has one version, ReleaseChecks', so a release, which RELEASE=true marks for a pull request into the main branch, must call the action at that version, and the push of a release's tag, vX.Y.Z, in TAG, must be that version too; a major tag, such as v1, only moves to a release.
+# The repository has one version, ReleaseChecks', so a release, which RELEASE=true marks for a pull request into master, must call the action at that version, and the push of a release's tag, vX.Y.Z, in TAG, must be that version too; a major tag, such as v1, only moves to a release.
 # Run from the root of the repository.
 set -euo pipefail
 refs=$(grep -hoE '^[[:space:]]*(- )?uses: BioJulia/Workflows@[^[:space:]]+' .github/workflows/*.yml | sed 's/.*@//' | sort -u)
