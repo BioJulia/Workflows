@@ -17,3 +17,4 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - TagBot, which tags the releases of ReleaseChecks, registered from `ReleaseChecks/`, as `ReleaseChecks-vX.Y.Z`.
 - This repository follows gitflow, with `master` and `develop`, and checks its own pull requests with its reusable gitflow and back-merge workflows.
 - The README explains how to create the back-merge token, `BACK_MERGE_TOKEN`, and store it as a repository or organization secret.
+- The back-merge workflow opens its pull request with a GitHub App's token, from the secrets `BACK_MERGE_APP_ID` and `BACK_MERGE_APP_PRIVATE_KEY`, in preference to `BACK_MERGE_TOKEN`; the README explains how to create the app.
