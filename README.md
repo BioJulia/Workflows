@@ -148,3 +148,10 @@ To release the workflows:
 3. move the major tag, `v1`, to it, with `git tag -f v1 v1.0.1` and `git push -f origin v1`.
 
 A breaking change to a workflow's inputs, jobs or check names takes a new major tag, `v2`.
+
+To release ReleaseFlow:
+1. set its new version in `ReleaseFlow/Project.toml`, and move the unreleased entries of `ReleaseFlow/CHANGELOG.md` into its section;
+2. comment `@JuliaRegistrator register subdir=ReleaseFlow` on the commit, which registers it in General from the subdirectory;
+3. once General merges the registration, TagBot tags the commit `ReleaseFlow-vX.Y.Z`.
+
+A release of the workflows carries the copy of ReleaseFlow at its tag, so a fix to the checks reaches the workflows' users with the workflows' next release, and reaches `]add ReleaseFlow` with the package's.
