@@ -14,7 +14,7 @@
 # On a pull request into the main branch: Source branch, Version, Changelog and Breaking changes.
 # On a pull request into develop: Source branch and Changelog entry.
 # The checks of the other branch are skipped, and a skipped check counts as passed, so both branches' rulesets may require every check, as "gitflow / Source branch" and so on.
-name: Gitflow
+name: "Reusable: Gitflow"
 
 on:
   workflow_call:

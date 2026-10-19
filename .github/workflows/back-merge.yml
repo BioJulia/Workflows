@@ -24,7 +24,7 @@
 # Either way, the repository must allow GitHub Actions to create pull requests, in Settings → Actions → General.
 #
 # The job runs in the deployment environment `environment`, `back-merge` unless given: keep the secrets there, as environment secrets, and limit the environment to the main branch, so that a workflow on any other branch can't read them.
-name: Back-merge
+name: "Reusable: Back-merge"
 
 on:
   workflow_call:

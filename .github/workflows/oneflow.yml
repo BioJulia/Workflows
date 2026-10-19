@@ -15,7 +15,7 @@
 # From a release or hotfix branch: Source branch, Version, Changelog and Breaking changes, on the branch's head commit, which is the release.
 # From any other branch: Source branch and Changelog entry.
 # The checks that don't apply are skipped, and a skipped check counts as passed, so the ruleset may require every check, as "oneflow / Source branch" and so on.
-name: OneFlow
+name: "Reusable: OneFlow"
 
 on:
   workflow_call:
