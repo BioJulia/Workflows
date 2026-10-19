@@ -122,9 +122,14 @@ One app serves every repository of the organization that uses the back-merge wor
 2. Name it, such as `<organization> ReleaseFlow`, which must be unique on GitHub, and give its homepage URL, such as the organization's page.
 3. Under Webhook, clear "Active": the workflow calls the app, rather than the app listening for events.
 4. Under repository permissions, set:
+   - Pull requests: Read and write, to open the pull request.
+
+   The job's own token creates the `back-merge/vX.Y.Z` branch, so nothing more is needed.
+   GitHub may refuse the job's token that branch, when its workflow files differ from the default branch's, since that token can't have access to workflows; the workflow then logs the refusal and creates the branch with this token instead, which then also needs:
    - Contents: Read and write, to create the branch;
-   - Pull requests: Read and write, to open the pull request;
-   - Workflows: Read and write, since the branch carries the main branch's workflow files, which may differ from `develop`'s.
+   - Workflows: Read and write, for the branch's workflow files.
+
+   Add those two only if a back-merge's log shows that refusal.
 
    Metadata: Read-only is added by itself; leave every other permission at no access.
 5. Under "Where can this GitHub App be installed?", choose "Only on this account", and choose "Create GitHub App".
@@ -142,7 +147,7 @@ To check it, run the caller's Back-merge workflow from the Actions tab, with "Ru
 ### Creating the ReleaseFlow token
 
 Where a GitHub App can't be created, such as for a repository of a personal account, a fine-grained personal access token does the same, in the secret `RELEASEFLOW_TOKEN`.
-The back-merge workflow uses it to create the `back-merge/vX.Y.Z` branch and open its pull request.
+The back-merge workflow uses it to open its pull request.
 GitHub shows the token's owner as the pull request's author, so prefer a maintainers' machine account, such as a bot account of the organization, to a person's: an author can't approve their own pull request, and the token outlives a maintainer's involvement.
 
 1. Signed in as the token's owner, open Settings → Developer settings → Personal access tokens → Fine-grained tokens, and choose "Generate new token".
@@ -150,9 +155,14 @@ GitHub shows the token's owner as the pull request's author, so prefer a maintai
 3. Set the resource owner to the organization that owns the repositories, rather than the account; an organization that reviews fine-grained tokens holds it as pending until an owner approves it, in the organization's Settings → Personal access tokens → Pending requests.
 4. Under repository access, choose "Only select repositories", and select the repositories that use the back-merge workflow.
 5. Under repository permissions, set:
+   - Pull requests: Read and write, to open the pull request.
+
+   The job's own token creates the `back-merge/vX.Y.Z` branch, so nothing more is needed.
+   GitHub may refuse the job's token that branch, when its workflow files differ from the default branch's, since that token can't have access to workflows; the workflow then logs the refusal and creates the branch with this token instead, which then also needs:
    - Contents: Read and write, to create the branch;
-   - Pull requests: Read and write, to open the pull request;
-   - Workflows: Read and write, since the branch carries the main branch's workflow files, which may differ from `develop`'s.
+   - Workflows: Read and write, for the branch's workflow files.
+
+   Add those two only if a back-merge's log shows that refusal.
 
    Metadata: Read-only is added by itself; leave every other permission at no access.
 6. Choose "Generate token", and copy it; GitHub shows it only once.

@@ -18,14 +18,16 @@ end
     directory = mktempdir()
     script = joinpath(directory, "step.sh")
     write(script, back_merge_script())
-    # A stand-in for `gh`: it logs its calls, creates refs in the origin for `api`, and reports `OPEN_PRS` open pull requests.
+    # A stand-in for `gh`: it logs its calls with their tokens, creates refs in the origin for `api`, unless `REFUSE_DEFAULT` refuses the default token as GitHub may, and reports `OPEN_PRS` open pull requests.
     bin = mkpath(joinpath(directory, "bin"))
     write(
         joinpath(bin, "gh"), raw"""
         #!/bin/bash
-        echo "gh $*" >> "$LOG"
+        echo "gh $* (token $GH_TOKEN)" >> "$LOG"
         case "$1 $2" in
-          "api repos/"*) for a in "$@"; do case "$a" in ref=*) ref=${a#ref=};; sha=*) sha=${a#sha=};; esac; done; git -C "$ORIGIN" update-ref "$ref" "$sha";;
+          "api repos/"*)
+            if [ "$GH_TOKEN" = default ] && [ -n "$REFUSE_DEFAULT" ]; then echo "refusing to allow a GitHub App to create or update workflow without workflows permission" >&2; exit 1; fi
+            for a in "$@"; do case "$a" in ref=*) ref=${a#ref=};; sha=*) sha=${a#sha=};; esac; done; git -C "$ORIGIN" update-ref "$ref" "$sha";;
           "pr list") echo "${OPEN_PRS:-0}";;
         esac
         """
@@ -46,10 +48,11 @@ end
     git(work, "fetch", "-q", "origin")
     log = joinpath(directory, "log")
 
-    function step(; has_token = "true", open = "0", project = "")
+    function step(; has_token = "true", open = "0", project = "", refuse_default = false)
         write(log, "")
         environment = Dict(
-            "PATH" => "$(bin):$(ENV["PATH"])", "LOG" => log, "ORIGIN" => origin, "GH_TOKEN" => "token", "HAS_TOKEN" => has_token,
+            "PATH" => "$(bin):$(ENV["PATH"])", "LOG" => log, "ORIGIN" => origin, "GH_TOKEN" => has_token == "true" ? "token" : "default", "HAS_TOKEN" => has_token,
+            "DEFAULT_TOKEN" => "default", "REFUSE_DEFAULT" => refuse_default ? "1" : "",
             "REPOSITORY" => "Example/Toy.jl", "RELEASEFLOW_MAIN_BRANCH" => "master", "RELEASEFLOW_DEVELOP_BRANCH" => "develop", "OPEN_PRS" => open, "RELEASEFLOW_PROJECT" => project,
         )
         output = IOBuffer()
@@ -63,6 +66,21 @@ end
     @test git(origin, "rev-parse", "refs/heads/back-merge/v0.1.0") == git(work, "rev-parse", "master")
     @test any(call -> startswith(call, "gh pr create") && occursin("--base develop", call), result.calls)
     @test occursin("close and reopen it", read(log, String))
+    # The job's own token creates the branch, so the pull request's token needs only access to pull requests.
+    @test any(call -> startswith(call, "gh api") && endswith(call, "(token default)"), result.calls)
+    # Where GitHub refuses the job's token the branch, the pull request's token creates it.
+    git(origin, "update-ref", "-d", "refs/heads/back-merge/v0.1.0")
+    git(work, "fetch", "-q", "--prune", "origin")
+    result = step(; refuse_default = true)
+    @test result.code == 0 && occursin("The job's token couldn't create the branch back-merge/v0.1.0: refusing to allow", result.output)
+    @test [split(call, " (token ")[end] for call in result.calls if startswith(call, "gh api")] == ["default)", "token)"]
+    @test git(origin, "rev-parse", "refs/heads/back-merge/v0.1.0") == git(work, "rev-parse", "master")
+    # Without another token, the refusal is an error.
+    git(origin, "update-ref", "-d", "refs/heads/back-merge/v0.1.0")
+    git(work, "fetch", "-q", "--prune", "origin")
+    result = step(; has_token = "false", refuse_default = true)
+    @test result.code == 1 && occursin("::error title=Back-merge::The job's token couldn't create the branch", result.output)
+    git(origin, "update-ref", "refs/heads/back-merge/v0.1.0", git(work, "rev-parse", "master"))
     # A rerun leaves the branch and the open pull request as they are.
     git(work, "fetch", "-q", "origin")
     result = step(; open = "1")
