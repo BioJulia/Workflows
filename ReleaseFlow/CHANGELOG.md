@@ -6,6 +6,8 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-10-19
+
 - ReleaseFlow, the checks of the pull requests of a Julia package under gitflow, OneFlow and trunk: source branches and where they came from, versions, changelogs with comparison links, breaking changes to the public API, tests and compat bounds, and changelog entries.
 - The last release, for OneFlow and trunk, is the commit whose tree the registry records for the main branch's version, cross-checked with its tag.
 - Each check is a method of `check(::C, ::Settings{M})`, dispatching on the model, the kind of branch, and the source of the last release.
@@ -18,6 +20,9 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - This repository follows gitflow, with `master` and `develop`, and checks its own pull requests with its reusable gitflow and back-merge workflows.
 - The back-merge job runs in the deployment environment `releaseflow`, whose secrets reach only the main branch, and takes the app's client ID, `RELEASEFLOW_APP_CLIENT_ID`, as `actions/create-github-app-token` v3 does.
 - The workflows and the action pin the actions of other owners to commits, which Dependabot updates, and `.github/CODEOWNERS` requires a maintainer's review of the workflows and the action.
-- The README explains how to create the ReleaseFlow token, `RELEASEFLOW_TOKEN`, and store it as a repository or organization secret.
+- The README explains how to create the ReleaseFlow token, `RELEASEFLOW_TOKEN`, and store it as a secret of the `releaseflow` environment.
 - The back-merge workflow opens its pull request with a GitHub App's token, from the secrets `RELEASEFLOW_APP_CLIENT_ID` and `RELEASEFLOW_APP_PRIVATE_KEY`, in preference to `RELEASEFLOW_TOKEN`; the README explains how to create the app.
 - The back-merge workflow creates its branch with the job's own token, so the app or personal token needs only read and write access to pull requests; where GitHub refuses the job's token the branch, the other token creates it, with access to contents and workflows.
+
+[Unreleased]: https://github.com/BioJulia/Workflows/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/BioJulia/Workflows/releases/tag/v1.0.0
