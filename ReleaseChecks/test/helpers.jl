@@ -1,4 +1,4 @@
-# Helpers of the end-to-end tests: git repositories of a toy package, `Toy`, in temporary directories, a scratch registry, and running `checks/main.jl` in them, as the workflows do.
+# Helpers of the end-to-end tests: git repositories of a toy package, `Toy`, in temporary directories, a scratch registry, and running `ReleaseChecks/main.jl` in them, as the workflows do.
 
 const CHECKS = normpath(joinpath(@__DIR__, ".."))
 const MAIN = joinpath(CHECKS, "main.jl")
