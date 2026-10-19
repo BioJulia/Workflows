@@ -41,6 +41,7 @@ The inputs are environment variables, so that branch names never reach a shell, 
 | `RELEASEFLOW_SKIP_CHANGELOG` | `false` | Whether the pull request has the label that exempts it from the changelog entry. |
 | `RELEASEFLOW_SKIP_LABEL` | `skip changelog` | That label, for messages. |
 | `RELEASEFLOW_CHECK_LINKS` | `true` | Whether to check the changelog's comparison links. |
+| `RELEASEFLOW_PROJECT` | the root | The package's directory, relative to the repository's root, for a package in a subdirectory, such as `lib/Toy`; its `Project.toml` and `CHANGELOG.md` are read there, and its releases are its directory's trees. |
 | `RELEASEFLOW_REGISTRY` | `General` | The name of an installed registry, or the path of a registry's directory, whose records give the commits of releases. |
 
 ## The code

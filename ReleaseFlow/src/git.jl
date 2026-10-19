@@ -24,13 +24,21 @@ merge_base(settings::Settings, a, b) = git(settings, "merge-base", a, b)
 
 is_ancestor(settings::Settings, a, b) = git(settings, "merge-base", "--is-ancestor", a, b) !== nothing
 
-tree_of(settings::Settings, ref) = git(settings, "rev-parse", "$(ref)^{tree}")
+# The tree of the package at `ref`, which is what a registry records: the repository's, or the package's subdirectory's.
+package_tree(settings::Settings, ref) = git(settings, "rev-parse", isempty(settings.project) ? "$(ref)^{tree}" : "$(ref):$(settings.project)")
 
-# The first commit of any branch or tag whose tree is `tree`, or `nothing`.
+# The first commit of any branch or tag whose package tree is `tree`, or `nothing`.
 function commit_with_tree(settings::Settings, tree)
-    for line in split(something(git(settings, "log", "--all", "--format=%H %T"), ""), '\n')
-        commit, commit_tree = (split(line, ' ')..., "", "")
-        commit_tree == tree && return String(commit)
+    if isempty(settings.project)
+        for line in split(something(git(settings, "log", "--all", "--format=%H %T"), ""), '\n')
+            commit, commit_tree = (split(line, ' ')..., "", "")
+            commit_tree == tree && return String(commit)
+        end
+    else
+        # Only the commits that change the package's subdirectory can be the first with its tree.
+        for commit in split(something(git(settings, "log", "--all", "--format=%H", "--", settings.project), ""), '\n')
+            isempty(commit) || package_tree(settings, commit) != tree || return String(commit)
+        end
     end
     return nothing
 end

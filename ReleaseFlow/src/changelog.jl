@@ -74,8 +74,8 @@ function subsection_entries(section::Section, title)
 end
 
 function head_changelog(settings::Settings)
-    path = joinpath(settings.root, "CHANGELOG.md")
-    isfile(path) || (failure(settings, "Changelog", "There's no CHANGELOG.md."); return nothing)
+    path = joinpath(package_directory(settings), "CHANGELOG.md")
+    isfile(path) || (failure(settings, "Changelog", "There's no $(package_path(settings, "CHANGELOG.md"))."); return nothing)
     return read(path, String)
 end
 

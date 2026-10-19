@@ -18,7 +18,7 @@ function check(::EntryCheck, settings::Settings)
     end
     text = head_changelog(settings)
     text === nothing && return
-    base = base_file(settings, "CHANGELOG.md")
+    base = base_file(settings, package_path(settings, "CHANGELOG.md"))
     known = Set(base === nothing ? String[] : unreleased_entries(sections(base)))
     added = filter(entry -> !(entry in known), unreleased_entries(sections(text)))
     if isempty(added)

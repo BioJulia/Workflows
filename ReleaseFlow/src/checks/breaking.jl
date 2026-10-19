@@ -56,25 +56,27 @@ end
 # The entries of the last release's public API that the head no longer provides.
 function api_removals(settings::Settings, release::LastRelease, directory, name)
     listing = joinpath(mktempdir(), "base.txt")
-    ok, output, errors = julia_in(directory, `$(SURFACE) $(name) list`)
+    ok, output, errors = julia_in(package_directory(settings, directory), `$(SURFACE) $(name) list`)
     ok || (failure(settings, "Breaking changes", "The public API of $(label(release)) couldn't be listed:\n$(last(errors, 2000))"); return String[])
     write(listing, output)
-    ok, output, errors = julia_in(settings.root, `$(SURFACE) $(name) against $(listing)`)
+    ok, output, errors = julia_in(package_directory(settings), `$(SURFACE) $(name) against $(listing)`)
     ok || (failure(settings, "Breaking changes", "The public API of $(head_label(settings)) couldn't be compared:\n$(last(errors, 2000))"); return String[])
     return filter(!isempty, split(output, '\n'))
 end
 
 # Run the last release's tests against the head: a copy of the head with the release's `test/` directory.
-function old_tests(settings::Settings, release_directory)
+function old_tests(settings::Settings, release_checkout)
     directory = mktempdir()
+    head = package_directory(settings)
+    release_directory = package_directory(settings, release_checkout)
     # Without the manifest, which Pkg resolves afresh for the head's dependencies.
-    for entry in readdir(settings.root)
-        entry in (".git", "test") || startswith(entry, "Manifest") || cp(joinpath(settings.root, entry), joinpath(directory, entry))
+    for entry in readdir(head)
+        entry in (".git", "test") || startswith(entry, "Manifest") || cp(joinpath(head, entry), joinpath(directory, entry))
     end
     isdir(joinpath(release_directory, "test")) || return true, "the base has no tests"
     cp(joinpath(release_directory, "test"), joinpath(directory, "test"))
     # A release from before the tests were a project of the workspace keeps the head's test project, which the head's workspace names.
-    head_test_project = joinpath(settings.root, "test", "Project.toml")
+    head_test_project = joinpath(head, "test", "Project.toml")
     test_project = joinpath(directory, "test", "Project.toml")
     isfile(test_project) || !isfile(head_test_project) || cp(head_test_project, test_project)
     ok, output, errors = julia_in(directory, `-e "using Pkg; Pkg.test()"`)
@@ -100,7 +102,7 @@ function check(::BreakingCheck, settings::Settings)
     end
     head = head_version(settings)
     name = head_project(settings)["name"]
-    narrowed, widened = compat_changes(TOML.parse(file_at(settings, release.ref, "Project.toml")), head_project(settings))
+    narrowed, widened = compat_changes(TOML.parse(file_at(settings, release.ref, package_path(settings, "Project.toml"))), head_project(settings))
     removed, (tests_pass, failing) = with_checkout(settings, release.ref) do directory
         api_removals(settings, release, directory, name), old_tests(settings, directory)
     end

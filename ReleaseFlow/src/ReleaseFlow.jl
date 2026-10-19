@@ -28,6 +28,7 @@ Inputs are environment variables, so that branch names never reach a shell, and 
 - `RELEASEFLOW_DEVELOP_REF`, `origin/<RELEASEFLOW_DEVELOP_BRANCH>` unless given;
 - `RELEASEFLOW_SKIP_CHANGELOG`, `true` where the pull request has the label `RELEASEFLOW_SKIP_LABEL`, `skip changelog` unless given, for `entry`;
 - `RELEASEFLOW_CHECK_LINKS`, whether the changelog's comparison links are checked, `true` unless given;
+- `RELEASEFLOW_PROJECT`, the package's directory, relative to the repository's root, for a package in a subdirectory; the root unless given;
 - `RELEASEFLOW_REGISTRY`, the name of an installed registry, or the path of a registry's directory, `General` unless given.
 The base's files are read with `git show`, and a base without them, as before the first release, has no version and no changelog.
 """

@@ -9,6 +9,8 @@ The inputs of a run of the checks under the model `M`, from the environment, wha
 struct Settings{M <: Model}
     model::M
     root::String
+    # The package's directory, relative to the root; empty for a package at the root.
+    project::String
     main_branch::String
     develop_branch::String
     head_ref::String
@@ -37,6 +39,7 @@ function Settings(environment = ENV; root = pwd())
     return Settings(
         MODELS[input(environment, "RELEASEFLOW_MODEL", "gitflow")],
         root,
+        String(strip(input(environment, "RELEASEFLOW_PROJECT", ""), '/')),
         main_branch,
         develop_branch,
         input(environment, "RELEASEFLOW_HEAD_REF", ""),
@@ -55,6 +58,12 @@ function Settings(environment = ENV; root = pwd())
         String[],
     )
 end
+
+# The path of `name` in the package, relative to the repository's root, as git names it.
+package_path(settings::Settings, name) = isempty(settings.project) ? name : "$(settings.project)/$(name)"
+
+# The package's directory in the checkout at `root`.
+package_directory(settings::Settings, root = settings.root) = joinpath(root, settings.project)
 
 # What `find` gives, found once per run.
 found!(find, settings::Settings, key::Symbol) = get!(find, settings.found, key)
