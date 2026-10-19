@@ -24,8 +24,8 @@ jobs:
       - uses: julia-actions/cache@v3
       - name: Run the tests
         run: |
-          julia --project=test -e 'using Pkg; Pkg.instantiate()'
-          julia --project=test test/runtests.jl
+          julia --project=checks/test -e 'using Pkg; Pkg.instantiate()'
+          julia --project=checks/test checks/test/runtests.jl
 
   runic:
     name: Runic

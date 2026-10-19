@@ -137,14 +137,14 @@ Each check is a method of `check(::C, ::Settings{M})`, and the rules that differ
 
 ## Developing
 
-The tests build git repositories of a toy package, and a scratch registry, so they need no network:
+The package's tests, in `checks/test/`, call it directly, and build git repositories of a toy package and a scratch registry for the end-to-end checks, so they need no network:
 
 ```bash
-julia --project=test -e 'using Pkg; Pkg.instantiate()'
+julia --project=checks/test -e 'using Pkg; Pkg.instantiate()'
 ```
 
 ```bash
-julia --project=test test/runtests.jl
+julia --project=checks/test checks/test/runtests.jl
 ```
 
 The reusable workflows call the action at the release that they belong to, such as `BioJulia/Workflows@v1.0.0`, so that a workflow and its script come from one release.

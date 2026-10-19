@@ -3,7 +3,7 @@
 
 # The shell of the back-merge workflow's step, read from the workflow: the block after its `run: |`, without its indentation.
 function back_merge_script()
-    lines = readlines(normpath(joinpath(@__DIR__, "..", ".github", "workflows", "back-merge.yml")))
+    lines = readlines(normpath(joinpath(@__DIR__, "..", "..", ".github", "workflows", "back-merge.yml")))
     start = findfirst(line -> endswith(line, "run: |"), lines)
     indentation = length(match(r"^ *", lines[start + 1]).match)
     block = String[]
