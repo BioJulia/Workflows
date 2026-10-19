@@ -144,7 +144,10 @@ end
 passes(result) = result.code == 0
 fails(result, message) = result.code == 1 && occursin(message, result.output)
 
-# The shell of the step `name` of the workflow `file`: the block after its `run: |`, without its indentation.
+# Workflows
+# ---------
+
+# The shell of the step `name` of the workflow `file`, in .github/workflows: the block after its `run: |`, without its indentation.
 function workflow_step(file, name)
     lines = readlines(normpath(joinpath(@__DIR__, "..", "..", ".github", "workflows", file)))
     named = findfirst(line -> strip(line) == "- name: $(name)", lines)

@@ -61,6 +61,30 @@ jobs:
       RELEASEFLOW_TOKEN: ${{ secrets.RELEASEFLOW_TOKEN }}
 ```
 
+And the dependents' tests, in `.github/workflows/Dependents.yml`, which run the tests of the packages that depend on this one with the pull request's branch in its place:
+
+```yaml
+name: Dependents
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+permissions: {}
+jobs:
+  dependents:
+    uses: BioJulia/Workflows/.github/workflows/dependents.yml@v1
+    permissions:
+      contents: read
+    with:
+      dependents: |
+        BioJulia/BED.jl
+        BioJulia/GFF3.jl
+```
+
+Each dependent is checked out at its default branch, and its tests run as the check `dependents / <repository>`, with `julia-version`, `1` unless given.
+A breaking release is expected to break its dependents until they adapt, so whether a ruleset requires these checks is the maintainers' choice; without that, they report what a release would break before it's registered.
+A dependent whose project takes the package from a local path, through `[sources]`, tests against that path instead.
+
 OneFlow and trunk, in `.github/workflows/OneFlow.yml` or `.github/workflows/Trunk.yml`:
 
 ```yaml
@@ -121,8 +145,10 @@ A package can follow the major tag, `v1`, or pin a release, such as `v1.0.0`; De
 | `skip-label` | `skip changelog` | gitflow, oneflow, trunk | The label that exempts a pull request from the changelog entry. |
 | `check-links` | `true` | gitflow, oneflow, trunk | Whether to check the changelog's comparison links. |
 | `require-entry` | `true` | trunk | Whether a pull request that isn't a release must add a changelog entry, for a changelog without an unreleased section. |
-| `project` | the root | gitflow, back-merge, oneflow, trunk | The package's directory, for a package in a subdirectory, such as `lib/Toy`. |
+| `project` | the root | gitflow, back-merge, oneflow, trunk, dependents | The package's directory, for a package in a subdirectory, such as `lib/Toy`. |
 | `registry` | `General` | gitflow, oneflow, trunk | The registry of the package's releases. |
+| `dependents` | none | dependents | The repositories of the packages that depend on this one, one per line or separated by commas. |
+| `julia-version` | `1` | dependents | The version of Julia that the dependents' tests run on. |
 
 For example, `with: { main-branch: master }` for a repository whose main branch is `master`.
 
