@@ -1,0 +1,146 @@
+# Gitflow checks, for a repository with a main branch of releases and a develop branch of unreleased work.
+# Called from the repository's own workflow, on pull requests into both branches:
+#
+#   on:
+#     pull_request:
+#       branches: [master, develop]
+#       types: [opened, synchronize, reopened, labeled, unlabeled]
+#   jobs:
+#     gitflow:
+#       uses: BioJulia/Workflows/.github/workflows/gitflow.yml@v1
+#       permissions:
+#         contents: read
+#
+# On a pull request into the main branch: Source branch, Version, Changelog and Breaking changes.
+# On a pull request into develop: Source branch and Changelog entry.
+# The checks of the other branch are skipped, and a skipped check counts as passed, so both branches' rulesets may require every check, as "gitflow / Source branch" and so on.
+name: "Reusable: Gitflow"
+
+on:
+  workflow_call:
+    inputs:
+      main-branch:
+        description: The branch of releases.
+        type: string
+        default: master
+      develop-branch:
+        description: The branch of unreleased work.
+        type: string
+        default: develop
+      skip-label:
+        description: The label that exempts a pull request into develop from the changelog entry.
+        type: string
+        default: skip changelog
+      check-links:
+        description: Whether to check the changelog's comparison links.
+        type: boolean
+        default: true
+      project:
+        description: The package's directory, relative to the repository's root, for a package in a subdirectory.
+        type: string
+        default: ''
+      registry:
+        description: The registry of the package's releases.
+        type: string
+        default: General
+
+permissions: {}
+
+jobs:
+  source:
+    name: Source branch
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      # The history of both branches, and of the pull request's head commit, which the merge commit contains even from a fork.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: BioJulia/Workflows@v1.0.0
+        with:
+          check: source
+          model: gitflow
+          project: ${{ inputs.project }}
+          main-branch: ${{ inputs.main-branch }}
+          develop-branch: ${{ inputs.develop-branch }}
+
+  version:
+    name: Version
+    if: github.base_ref == inputs.main-branch
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: BioJulia/Workflows@v1.0.0
+        with:
+          check: version
+          model: gitflow
+          project: ${{ inputs.project }}
+          main-branch: ${{ inputs.main-branch }}
+          develop-branch: ${{ inputs.develop-branch }}
+          registry: ${{ inputs.registry }}
+
+  changelog:
+    name: Changelog
+    if: github.base_ref == inputs.main-branch
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: BioJulia/Workflows@v1.0.0
+        with:
+          check: changelog
+          model: gitflow
+          project: ${{ inputs.project }}
+          main-branch: ${{ inputs.main-branch }}
+          develop-branch: ${{ inputs.develop-branch }}
+          check-links: ${{ inputs.check-links }}
+
+  breaking:
+    name: Breaking changes
+    if: github.base_ref == inputs.main-branch
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: julia-actions/setup-julia@da908477b5db94c10ffce8cfea9f2b3b9d5db687 # v3.0.3
+        with:
+          version: '1'
+      - uses: julia-actions/cache@9353db09a0f2bbbdec6f41791918c75d37391b36 # v3.5.0
+      # Compares the main branch's public API and compat bounds with the head's, runs the main branch's tests against the head, and writes what it finds to the job summary.
+      - uses: BioJulia/Workflows@v1.0.0
+        with:
+          check: breaking
+          model: gitflow
+          project: ${{ inputs.project }}
+          main-branch: ${{ inputs.main-branch }}
+          develop-branch: ${{ inputs.develop-branch }}
+
+  entry:
+    name: Changelog entry
+    if: github.base_ref == inputs.develop-branch
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: BioJulia/Workflows@v1.0.0
+        with:
+          check: entry
+          model: gitflow
+          project: ${{ inputs.project }}
+          main-branch: ${{ inputs.main-branch }}
+          develop-branch: ${{ inputs.develop-branch }}
+          skip-label: ${{ inputs.skip-label }}

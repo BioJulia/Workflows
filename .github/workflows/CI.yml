@@ -1,0 +1,64 @@
+# The repository's own checks: the tests of ReleaseChecks, Runic formatting, actionlint on the workflows, and the pins of the workflows' calls of the action.
+name: CI
+
+on:
+  push:
+    branches:
+      - master
+      - develop
+      - release/*
+      - hotfix/*
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    name: Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: julia-actions/setup-julia@da908477b5db94c10ffce8cfea9f2b3b9d5db687 # v3.0.3
+        with:
+          version: '1'
+      - uses: julia-actions/cache@9353db09a0f2bbbdec6f41791918c75d37391b36 # v3.5.0
+      - name: Run the tests
+        run: |
+          julia --project=ReleaseChecks/test -e 'using Pkg; Pkg.instantiate()'
+          julia --project=ReleaseChecks/test ReleaseChecks/test/runtests.jl
+
+  runic:
+    name: Runic
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: julia-actions/setup-julia@da908477b5db94c10ffce8cfea9f2b3b9d5db687 # v3.0.3
+        with:
+          version: '1'
+      - uses: fredrikekre/runic-action@b4dbd650db5cc684baae27fea45d22daf41693c2 # v1.5.0
+        with:
+          version: '1'
+
+  actionlint:
+    name: actionlint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: docker://rhysd/actionlint@sha256:887a259a5a534f3c4f36cb02dca341673c6089431057242cdc931e9f133147e9 # 1.7.7
+        with:
+          args: -color
+
+  pins:
+    name: Pins
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Check that the workflows call the action at one release
+        env:
+          TAG: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
+          # A pull request into master is a release, which calls the action at its own version.
+          RELEASE: ${{ github.base_ref == 'master' }}
+        run: .github/scripts/check_pins.sh

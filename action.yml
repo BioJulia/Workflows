@@ -1,0 +1,73 @@
+name: Julia release checks
+description: Checks a pull request of a Julia package under gitflow, OneFlow or trunk, with the ReleaseChecks package in ReleaseChecks/ at this action's own version.
+
+# Every input reaches the script through the environment, never the shell, so that a crafted branch name can't run commands.
+inputs:
+  check:
+    description: The check to run, `source`, `version`, `changelog`, `breaking`, `entry` or `release`.
+    required: true
+  model:
+    description: The branching model, `gitflow`, `oneflow` or `trunk`.
+    default: gitflow
+  main-branch:
+    description: The branch of releases.
+    default: master
+  develop-branch:
+    description: The branch of unreleased work, for gitflow.
+    default: develop
+  head-ref:
+    description: The branch that the pull request comes from.
+    default: ${{ github.head_ref }}
+  head-sha:
+    description: The pull request's head commit.
+    default: ${{ github.event.pull_request.head.sha }}
+  base-branch:
+    description: The branch that the pull request merges into.
+    default: ${{ github.base_ref }}
+  base-ref:
+    description: What the pull request merges into, as git names it; `origin/<base-branch>` if empty.
+    default: ''
+  skip-label:
+    description: The label that exempts a pull request from the changelog entry.
+    default: skip changelog
+  check-links:
+    description: Whether to check the changelog's comparison links.
+    default: 'true'
+  project:
+    description: The package's directory, relative to the repository's root, for a package in a subdirectory.
+    default: ''
+  registry:
+    description: The registry whose records give the commits of releases.
+    default: General
+
+outputs:
+  release:
+    description: For the `release` check, whether the pull request is a release, `true` or `false`.
+    value: ${{ steps.check.outputs.release }}
+
+runs:
+  using: composite
+  steps:
+    - uses: julia-actions/setup-julia@da908477b5db94c10ffce8cfea9f2b3b9d5db687 # v3.0.3
+      with:
+        version: '1'
+    - id: check
+      shell: bash
+      env:
+        CHECK: ${{ inputs.check }}
+        MODEL: ${{ inputs.model }}
+        MAIN_BRANCH: ${{ inputs.main-branch }}
+        DEVELOP_BRANCH: ${{ inputs.develop-branch }}
+        HEAD_REF: ${{ inputs.head-ref }}
+        HEAD_SHA: ${{ inputs.head-sha }}
+        BASE_BRANCH: ${{ inputs.base-branch }}
+        BASE_REF_INPUT: ${{ inputs.base-ref }}
+        SKIP_LABEL: ${{ inputs.skip-label }}
+        SKIP_CHANGELOG: ${{ contains(github.event.pull_request.labels.*.name, inputs.skip-label) }}
+        CHECK_LINKS: ${{ inputs.check-links }}
+        PROJECT: ${{ inputs.project }}
+        REGISTRY: ${{ inputs.registry }}
+      run: |
+        export BASE_REF="${BASE_REF_INPUT:-origin/$BASE_BRANCH}"
+        export DEVELOP_REF="origin/$DEVELOP_BRANCH"
+        julia --startup-file=no --project="$GITHUB_ACTION_PATH/ReleaseChecks" -m ReleaseChecks "$CHECK"

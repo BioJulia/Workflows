@@ -1,0 +1,24 @@
+# This repository's own caller of the reusable gitflow.yml, which other repositories call as BioJulia/Workflows/.github/workflows/gitflow.yml@v1; the Self- files apply this repository's workflows to itself.
+# This repository follows gitflow, with master and develop, and checks its own pull requests with its reusable gitflow workflow.
+# Its version and changelog are ReleaseChecks', in ReleaseChecks/.
+# The reusable workflow calls the action at the last release, so a pull request is checked by the released checks; CI tests the pull request's own.
+name: "Self: Gitflow"
+
+on:
+  pull_request:
+    branches:
+      - master
+      - develop
+    # Adding or removing the `skip changelog` label runs the checks again.
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+
+permissions: {}
+
+jobs:
+  gitflow:
+    uses: ./.github/workflows/gitflow.yml
+    permissions:
+      contents: read
+    with:
+      main-branch: master
+      project: ReleaseChecks

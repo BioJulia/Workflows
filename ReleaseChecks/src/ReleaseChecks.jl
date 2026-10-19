@@ -1,0 +1,77 @@
+"""
+    ReleaseChecks
+
+Checks of the pull requests of a Julia package, under one of three branching models.
+
+- gitflow: a main branch of releases and a develop branch of unreleased work.
+  Into the main branch come only release and hotfix branches; a hotfix carries no unreleased commit of develop, as it branches from the main branch, and a release carries develop's unreleased commits, as it branches from develop.
+  Into develop come any other branches, each with a new changelog entry.
+- oneflow: one main branch, from which release and hotfix branches are released, registered at their last commit, and merged back.
+  A hotfix branches from the last release's tag, and a release carries the main branch's work since then; any other branch adds a changelog entry.
+- trunk: one main branch, on which a release is a commit that changes the version; any other pull request adds a changelog entry.
+
+A release takes the next version, a changelog section that describes it, and, if it breaks the last release, a breaking version and a `### Breaking` subsection.
+A change is breaking if the last release's public API is no longer provided, if its tests fail, or if a compat bound no longer admits every version that it did.
+The last release is the main branch's version, at the commit that the registry records for it, cross-checked with its tag `vX.Y.Z`; gitflow compares with the main branch itself, which holds only releases.
+Where the main branch has no version, the pull request is the initial release, which takes a standard first version, 0.0.1, 0.1.0 or X.0.0, follows no version that the registry records or that a tag names, has a changelog of its own section only, and comes from a release branch rather than a hotfix.
+Git doesn't record which branch a branch was made from, only its commits, so the rules about origins look at the commits.
+
+Each check is a method of `check(::C, ::Settings{M})`; the rules that differ between models dispatch on the model `M`, those that differ between kinds of branch on the kind `K` of a `Branch{K}`, and those that differ by the release that the pull request is measured against on its `Baseline`: a `LastRelease{S}`, found from the source `S`, or the `InitialRelease`.
+
+Run from the root of the package's repository with `julia -m ReleaseChecks source|version|changelog|breaking|entry|release`, or call [`main`](@ref).
+Inputs are environment variables, so that branch names never reach a shell, and an empty one counts as missing:
+- `MODEL`, `gitflow`, `oneflow` or `trunk`, `gitflow` unless given;
+- `MAIN_BRANCH` and `DEVELOP_BRANCH`, `master` and `develop` unless given;
+- `HEAD_REF`, the source branch, such as `release/v0.2.0`;
+- `HEAD_SHA`, the pull request's head commit, `HEAD` unless given; in GitHub Actions, `HEAD` is the merge commit, which already contains the base;
+- `BASE_BRANCH`, the name of the branch that the pull request merges into, for `source`;
+- `BASE_REF`, what the pull request merges into, `origin/<MAIN_BRANCH>` unless given;
+- `DEVELOP_REF`, `origin/<DEVELOP_BRANCH>` unless given;
+- `SKIP_CHANGELOG`, `true` where the pull request has the label `SKIP_LABEL`, `skip changelog` unless given, for `entry`;
+- `CHECK_LINKS`, whether the changelog's comparison links are checked, `true` unless given;
+- `PROJECT`, the package's directory, relative to the repository's root, for a package in a subdirectory; the root unless given;
+- `REGISTRY`, the name of an installed registry, or the path of a registry's directory, `General` unless given.
+The base's files are read with `git show`, and a base without them, as before the first release, has no version and no changelog.
+"""
+module ReleaseChecks
+
+using Pkg
+using TOML
+using UUIDs
+
+include("models.jl")
+include("settings.jl")
+include("reporting.jl")
+include("git.jl")
+include("package.jl")
+include("branches.jl")
+include("registry.jl")
+include("releases.jl")
+include("changelog.jl")
+include("checks/checks.jl")
+include("checks/source.jl")
+include("checks/version.jl")
+include("checks/changelog.jl")
+include("checks/entry.jl")
+include("checks/release.jl")
+include("checks/breaking.jl")
+
+const USAGE = "usage: MODEL=$(join(sort(collect(keys(MODELS))), '|')) julia -m ReleaseChecks $(join(sort(collect(keys(CHECKS))), '|'))"
+
+"""
+    main(arguments; environment = ENV, root = pwd()) -> Int
+
+Run the check named by the one argument in `arguments` on the repository at `root`, with the inputs in `environment`, and return the exit code: `0` where it passes, `1` where it fails, and `2` for a wrong argument or model.
+It's the package's entry point, so `julia -m ReleaseChecks source` runs the check `source` in the current directory.
+"""
+function (@main)(arguments = ARGS; environment = ENV, root = pwd())
+    if length(arguments) != 1 || !haskey(CHECKS, arguments[1]) || !haskey(MODELS, input(environment, "MODEL", "gitflow"))
+        println(stderr, USAGE)
+        return 2
+    end
+    settings = Settings(environment; root)
+    check(CHECKS[arguments[1]], settings)
+    return isempty(settings.errors) ? 0 : 1
+end
+
+end # module ReleaseChecks

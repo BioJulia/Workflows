@@ -1,0 +1,148 @@
+# Trunk checks, for a repository with one main branch, on which a release is a commit that changes the version, registered and tagged by TagBot.
+# Called from the repository's own workflow, on pull requests into the main branch:
+#
+#   on:
+#     pull_request:
+#       branches: [main]
+#       types: [opened, synchronize, reopened, labeled, unlabeled]
+#   jobs:
+#     trunk:
+#       uses: BioJulia/Workflows/.github/workflows/trunk.yml@v1
+#       permissions:
+#         contents: read
+#
+# A pull request that changes the version is a release: Release, Version, Changelog and Breaking changes.
+# Any other: Release and Changelog entry, unless `require-entry` is false, for a changelog without an unreleased section.
+# The checks that don't apply are skipped, and a skipped check counts as passed, so the ruleset may require every check, as "trunk / Version" and so on.
+name: "Reusable: Trunk"
+
+on:
+  workflow_call:
+    inputs:
+      main-branch:
+        description: The main branch.
+        type: string
+        default: main
+      skip-label:
+        description: The label that exempts a pull request from the changelog entry.
+        type: string
+        default: skip changelog
+      require-entry:
+        description: Whether a pull request that isn't a release must add a changelog entry.
+        type: boolean
+        default: true
+      check-links:
+        description: Whether to check the changelog's comparison links.
+        type: boolean
+        default: true
+      project:
+        description: The package's directory, relative to the repository's root, for a package in a subdirectory.
+        type: string
+        default: ''
+      registry:
+        description: The registry of the package's releases.
+        type: string
+        default: General
+
+permissions: {}
+
+jobs:
+  release:
+    name: Release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      release: ${{ steps.release.outputs.release }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - id: release
+        uses: BioJulia/Workflows@v1.0.0
+        with:
+          check: release
+          model: trunk
+          project: ${{ inputs.project }}
+          main-branch: ${{ inputs.main-branch }}
+
+  version:
+    name: Version
+    needs: release
+    if: needs.release.outputs.release == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: BioJulia/Workflows@v1.0.0
+        with:
+          check: version
+          model: trunk
+          project: ${{ inputs.project }}
+          main-branch: ${{ inputs.main-branch }}
+          registry: ${{ inputs.registry }}
+
+  changelog:
+    name: Changelog
+    needs: release
+    if: needs.release.outputs.release == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: BioJulia/Workflows@v1.0.0
+        with:
+          check: changelog
+          model: trunk
+          project: ${{ inputs.project }}
+          main-branch: ${{ inputs.main-branch }}
+          check-links: ${{ inputs.check-links }}
+          registry: ${{ inputs.registry }}
+
+  breaking:
+    name: Breaking changes
+    needs: release
+    if: needs.release.outputs.release == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: julia-actions/setup-julia@da908477b5db94c10ffce8cfea9f2b3b9d5db687 # v3.0.3
+        with:
+          version: '1'
+      - uses: julia-actions/cache@9353db09a0f2bbbdec6f41791918c75d37391b36 # v3.5.0
+      - uses: BioJulia/Workflows@v1.0.0
+        with:
+          check: breaking
+          model: trunk
+          project: ${{ inputs.project }}
+          main-branch: ${{ inputs.main-branch }}
+          registry: ${{ inputs.registry }}
+
+  entry:
+    name: Changelog entry
+    needs: release
+    if: needs.release.outputs.release == 'false' && inputs.require-entry
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: BioJulia/Workflows@v1.0.0
+        with:
+          check: entry
+          model: trunk
+          project: ${{ inputs.project }}
+          main-branch: ${{ inputs.main-branch }}
+          skip-label: ${{ inputs.skip-label }}
