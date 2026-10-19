@@ -54,7 +54,10 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
+    # A GitHub App's ID and private key, or a personal access token, so that the pull request's checks run; see below.
     secrets:
+      RELEASEFLOW_APP_ID: ${{ secrets.RELEASEFLOW_APP_ID }}
+      RELEASEFLOW_APP_PRIVATE_KEY: ${{ secrets.RELEASEFLOW_APP_PRIVATE_KEY }}
       RELEASEFLOW_TOKEN: ${{ secrets.RELEASEFLOW_TOKEN }}
 ```
 
@@ -100,15 +103,46 @@ For example, `with: { main-branch: master }` for a repository whose main branch 
   The checks that don't apply to a pull request are skipped, and GitHub counts a skipped check as passed, so a ruleset can require all of them.
   GitHub only offers a check's name once it has run, and only enforces rulesets on a private repository with a paid plan.
 - **The label.** Create the `skip changelog` label, for changes that users won't notice.
-- **The ReleaseFlow token.** Pull requests opened with the default `GITHUB_TOKEN` don't start workflows, so their checks would never report; the secret `RELEASEFLOW_TOKEN` opens them instead, as described in [Creating the ReleaseFlow token](#creating-the-releaseflow-token).
-  Without it, the back-merge pull request says to close and reopen it, which starts the checks.
+- **The ReleaseFlow credentials.** Pull requests opened with the default `GITHUB_TOKEN` don't start workflows, so their checks would never report.
+  The back-merge opens them with another token, in order of preference:
+  - a GitHub App's, which it creates for each run from the secrets `RELEASEFLOW_APP_ID` and `RELEASEFLOW_APP_PRIVATE_KEY`, as described in [Creating the ReleaseFlow app](#creating-the-releaseflow-app);
+  - a fine-grained personal access token, in the secret `RELEASEFLOW_TOKEN`, as described in [Creating the ReleaseFlow token](#creating-the-releaseflow-token).
+
+  Without either, the back-merge pull request says to close and reopen it, which starts the checks.
   Either way, allow GitHub Actions to create pull requests, in the repository's Settings → Actions → General → Workflow permissions → "Allow GitHub Actions to create and approve pull requests".
 - **Code owners.** A pull request runs its own copy of its workflow files, so a `CODEOWNERS` entry for `/.github/workflows/`, with the ruleset requiring a code owner's review, keeps a pull request from changing which checks it runs.
 - **Forks.** The checks look at the pull request's head commit and this repository's branches, so they work the same for pull requests from forks; GitHub asks a maintainer to approve the workflows of a first-time contributor.
 
+### Creating the ReleaseFlow app
+
+A GitHub App belongs to the organization rather than to a person, so the pull requests it opens come from its bot, `<app>[bot]`, which any maintainer can approve, and its tokens last an hour, so there's nothing to renew.
+One app serves every repository of the organization that uses the back-merge workflow.
+
+1. Open the organization's Settings → Developer settings → GitHub Apps, and choose "New GitHub App".
+2. Name it, such as `<organization> ReleaseFlow`, which must be unique on GitHub, and give its homepage URL, such as the organization's page.
+3. Under Webhook, clear "Active": the workflow calls the app, rather than the app listening for events.
+4. Under repository permissions, set:
+   - Contents: Read and write, to create the branch;
+   - Pull requests: Read and write, to open the pull request;
+   - Workflows: Read and write, since the branch carries the main branch's workflow files, which may differ from `develop`'s.
+
+   Metadata: Read-only is added by itself; leave every other permission at no access.
+5. Under "Where can this GitHub App be installed?", choose "Only on this account", and choose "Create GitHub App".
+6. On the app's page, note its App ID, and under Private keys choose "Generate a private key", which downloads a `.pem` file.
+7. Choose "Install App", install it on the organization, and choose "Only select repositories", with the repositories that use the back-merge workflow.
+8. In the organization's Settings → Secrets and variables → Actions, add two organization secrets, with access for the same repositories:
+   - `RELEASEFLOW_APP_ID`, the App ID;
+   - `RELEASEFLOW_APP_PRIVATE_KEY`, the whole contents of the `.pem` file, from `-----BEGIN RSA PRIVATE KEY-----` to `-----END RSA PRIVATE KEY-----`.
+
+   Then delete the downloaded file; a new key can be generated if it's lost.
+
+The caller passes both secrets to the reusable workflow, which creates the app's token for its repository with `actions/create-github-app-token`.
+To check it, run the caller's Back-merge workflow from the Actions tab, with "Run workflow": it opens the pull request as `<app>[bot]` if `develop` lacks the main branch's commit, and its checks start.
+
 ### Creating the ReleaseFlow token
 
-The token is a fine-grained personal access token, which the back-merge workflow uses to create the `back-merge/vX.Y.Z` branch and open its pull request.
+Where a GitHub App can't be created, such as for a repository of a personal account, a fine-grained personal access token does the same, in the secret `RELEASEFLOW_TOKEN`.
+The back-merge workflow uses it to create the `back-merge/vX.Y.Z` branch and open its pull request.
 GitHub shows the token's owner as the pull request's author, so prefer a maintainers' machine account, such as a bot account of the organization, to a person's: an author can't approve their own pull request, and the token outlives a maintainer's involvement.
 
 1. Signed in as the token's owner, open Settings → Developer settings → Personal access tokens → Fine-grained tokens, and choose "Generate new token".

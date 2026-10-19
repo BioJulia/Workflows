@@ -12,12 +12,15 @@
 #         contents: write
 #         pull-requests: write
 #       secrets:
-#         RELEASEFLOW_TOKEN: ${{ secrets.RELEASEFLOW_TOKEN }}
+#         RELEASEFLOW_APP_ID: ${{ secrets.RELEASEFLOW_APP_ID }}
+#         RELEASEFLOW_APP_PRIVATE_KEY: ${{ secrets.RELEASEFLOW_APP_PRIVATE_KEY }}
 #
 # The pull request comes from a branch back-merge/vX.Y.Z at the main branch's commit, so that a conflict with develop is resolved on that branch, by merging develop into it, without pushing to the main branch.
 # Pull requests opened with the default GITHUB_TOKEN don't start workflows, so their required checks would never report.
-# The secret RELEASEFLOW_TOKEN avoids that: a fine-grained personal access token, or a GitHub App's token, with read and write access to the repository's contents, pull requests and workflows, since the main branch may change workflows that develop lacks.
-# Without it, the default token opens the pull request, which says to close and reopen it, so that the checks run.
+# Another token avoids that, with read and write access to the repository's contents, pull requests and workflows, since the main branch may change workflows that develop lacks:
+# - a GitHub App's, created for each run from the secrets RELEASEFLOW_APP_ID and RELEASEFLOW_APP_PRIVATE_KEY, which opens the pull request as the app's bot;
+# - or the secret RELEASEFLOW_TOKEN, a fine-grained personal access token, which opens it as the token's owner.
+# Without either, the default token opens the pull request, which says to close and reopen it, so that the checks run.
 # Either way, the repository must allow GitHub Actions to create pull requests, in Settings → Actions → General.
 name: Back-merge
 
@@ -37,8 +40,14 @@ on:
         type: string
         default: ''
     secrets:
+      RELEASEFLOW_APP_ID:
+        description: The ID of a GitHub App, installed on the repository, whose token opens the pull request so that its checks run.
+        required: false
+      RELEASEFLOW_APP_PRIVATE_KEY:
+        description: A private key of that GitHub App.
+        required: false
       RELEASEFLOW_TOKEN:
-        description: A token that opens the pull request so that its checks run.
+        description: A personal access token that opens the pull request so that its checks run, where there's no GitHub App.
         required: false
 
 permissions: {}
@@ -59,10 +68,22 @@ jobs:
         with:
           ref: ${{ inputs.main-branch }}
           fetch-depth: 0
+      # Secrets can't be tested in a step's condition, so this step tells whether a GitHub App is given.
+      - id: app-given
+        env:
+          APP_ID: ${{ secrets.RELEASEFLOW_APP_ID }}
+        run: echo "given=$([ -n "$APP_ID" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+      # The app's installation token, for this repository, which lasts an hour.
+      - id: app
+        if: steps.app-given.outputs.given == 'true'
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.RELEASEFLOW_APP_ID }}
+          private-key: ${{ secrets.RELEASEFLOW_APP_PRIVATE_KEY }}
       - name: Open the pull request from the main branch into develop
         env:
-          GH_TOKEN: ${{ secrets.RELEASEFLOW_TOKEN || github.token }}
-          HAS_TOKEN: ${{ secrets.RELEASEFLOW_TOKEN != '' }}
+          GH_TOKEN: ${{ steps.app.outputs.token || secrets.RELEASEFLOW_TOKEN || github.token }}
+          HAS_TOKEN: ${{ steps.app.outputs.token != '' || secrets.RELEASEFLOW_TOKEN != '' }}
           REPOSITORY: ${{ github.repository }}
           RELEASEFLOW_MAIN_BRANCH: ${{ inputs.main-branch }}
           RELEASEFLOW_DEVELOP_BRANCH: ${{ inputs.develop-branch }}
@@ -103,6 +124,6 @@ jobs:
           if [ "$HAS_TOKEN" != "true" ]; then
             body="$body
 
-          It was opened with the default token, which doesn't start workflows, so close and reopen it to run the checks; the secret RELEASEFLOW_TOKEN avoids this."
+          It was opened with the default token, which doesn't start workflows, so close and reopen it to run the checks; a GitHub App or the secret RELEASEFLOW_TOKEN avoids this."
           fi
           gh pr create --repo "$REPOSITORY" --head "$branch" --base "$RELEASEFLOW_DEVELOP_BRANCH" --title "Merge $RELEASEFLOW_MAIN_BRANCH (v$version) into $RELEASEFLOW_DEVELOP_BRANCH" --body "$body"

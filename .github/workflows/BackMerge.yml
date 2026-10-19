@@ -19,4 +19,6 @@ jobs:
       main-branch: master
       project: ReleaseFlow
     secrets:
+      RELEASEFLOW_APP_ID: ${{ secrets.RELEASEFLOW_APP_ID }}
+      RELEASEFLOW_APP_PRIVATE_KEY: ${{ secrets.RELEASEFLOW_APP_PRIVATE_KEY }}
       RELEASEFLOW_TOKEN: ${{ secrets.RELEASEFLOW_TOKEN }}
