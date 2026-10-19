@@ -223,7 +223,7 @@ julia --project=ReleaseFlow/test ReleaseFlow/test/runtests.jl
 
 ## Contributing
 
-This repository follows gitflow, with `master` and `develop`, and checks its own pull requests with its reusable gitflow workflow, through [`GitflowChecks.yml`](.github/workflows/GitflowChecks.yml):
+This repository follows gitflow, with `master` and `develop`, and checks its own pull requests with its reusable gitflow workflow, through [`Self-Gitflow.yml`](.github/workflows/Self-Gitflow.yml):
 - features and fixes branch from `develop`, add an entry under `## [Unreleased]` in [`ReleaseFlow/CHANGELOG.md`](ReleaseFlow/CHANGELOG.md), and merge back by pull request;
 - a release branches from `develop` as `release/vX.Y.Z`, and a hotfix from `master` as `hotfix/vX.Y.Z`; either merges into `master` by pull request, and the Back-merge workflow then opens the pull request that brings `master` back into `develop`.
 
