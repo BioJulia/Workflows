@@ -3,8 +3,10 @@
 Reusable GitHub Actions workflows for Julia packages: checks that a pull request follows the repository's branching model, and that a release takes the right version, describes itself in the changelog, and marks its breaking changes.
 
 The repository holds two things:
-- **the workflows**, in [`.github/workflows/`](.github/workflows), with the composite action, [`action.yml`](action.yml), that they call, released with tags `vX.Y.Z`;
-- **the checks**, a Julia package, [ReleaseChecks](ReleaseChecks), registered in General from this repository's `ReleaseChecks/` directory, released with tags `ReleaseChecks-vX.Y.Z`.
+- **the workflows**, in [`.github/workflows/`](.github/workflows), with the composite action, [`action.yml`](action.yml), that they call, tagged `vX.Y.Z`;
+- **the checks**, a Julia package, [ReleaseChecks](ReleaseChecks), registered in General from this repository's `ReleaseChecks/` directory, and tagged `ReleaseChecks-vX.Y.Z`.
+
+Both share one version, in `ReleaseChecks/Project.toml`, and one changelog, [`ReleaseChecks/CHANGELOG.md`](ReleaseChecks/CHANGELOG.md).
 
 The action runs the copy of ReleaseChecks at its own tag, so a workflow and its checks always come from one release; a package calls a workflow by its tag, and updates the checks by moving to a newer tag.
 
