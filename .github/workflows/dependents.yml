@@ -1,0 +1,101 @@
+# Dependents: test the packages that depend on this one with this branch in its place, so that a release that would break them is seen before it's registered.
+# Called from the repository's own workflow, on pull requests into the main branch, and by hand:
+#
+#   on:
+#     pull_request:
+#       branches: [main]
+#     workflow_dispatch:
+#   jobs:
+#     dependents:
+#       uses: BioJulia/Workflows/.github/workflows/dependents.yml@v1
+#       permissions:
+#         contents: read
+#       with:
+#         dependents: |
+#           BioJulia/BED.jl
+#           BioJulia/GFF3.jl
+#
+# Each dependent is checked out at its default branch, this branch's package takes the place of the registered one in the dependent's project, and the dependent's tests run, as the check "dependents / <repository>".
+# A breaking release is expected to break its dependents until they adapt, so the checks report rather than block, unless a ruleset requires them.
+name: "Reusable: Dependents"
+
+on:
+  workflow_call:
+    inputs:
+      dependents:
+        description: The repositories of the packages that depend on this one, such as `BioJulia/BED.jl`, one per line or separated by commas.
+        type: string
+        required: true
+      project:
+        description: The package's directory, relative to the repository's root, for a package in a subdirectory.
+        type: string
+        default: ''
+      julia-version:
+        description: The version of Julia to test with.
+        type: string
+        default: '1'
+
+permissions: {}
+
+jobs:
+  list:
+    name: Dependents
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.list.outputs.matrix }}
+    steps:
+      - name: List the dependents
+        id: list
+        env:
+          DEPENDENTS: ${{ inputs.dependents }}
+        run: |
+          set -euo pipefail
+          # One repository per line or separated by commas, each `owner/name`, without duplicates.
+          repositories=$(printf '%s\n' "$DEPENDENTS" | tr ',' '\n' | sed 's/^[[:space:]]*//; s/[[:space:]]*$//' | { grep -v '^$' || true; } | sort -u)
+          if [ -z "$repositories" ]; then
+            echo "::error title=Dependents::The input dependents names no repository."
+            exit 1
+          fi
+          while IFS= read -r repository; do
+            if ! [[ "$repository" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]]; then
+              echo "::error title=Dependents::$repository isn't a repository, owner/name."
+              exit 1
+            fi
+          done <<< "$repositories"
+          matrix=$(printf '%s\n' "$repositories" | python3 -c 'import json, sys; print(json.dumps([line.strip() for line in sys.stdin if line.strip()]))')
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+          echo "Testing the dependents $matrix."
+
+  test:
+    name: ${{ matrix.dependent }}
+    needs: list
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        dependent: ${{ fromJSON(needs.list.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: package
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ matrix.dependent }}
+          path: dependent
+          persist-credentials: false
+      - uses: julia-actions/setup-julia@da908477b5db94c10ffce8cfea9f2b3b9d5db687 # v3.0.3
+        with:
+          version: ${{ inputs.julia-version }}
+      - uses: julia-actions/cache@9353db09a0f2bbbdec6f41791918c75d37391b36 # v3.5.0
+      - name: Test the dependent with this package
+        env:
+          RELEASEFLOW_PROJECT: ${{ inputs.project }}
+        run: |
+          julia --startup-file=no --project=dependent -e '
+            using Pkg
+            # This branch takes the place of the registered package, in the dependent'"'"'s project and the projects of its workspace.
+            Pkg.develop(path = joinpath("package", ENV["RELEASEFLOW_PROJECT"]))
+            Pkg.instantiate()
+            Pkg.test()'
