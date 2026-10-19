@@ -19,14 +19,23 @@ end
 # The registry's name, for messages.
 registry_name(settings::Settings) = (instance = registry(settings); instance === nothing ? settings.registry : instance.name)
 
-# The tree of the package's `version` that the registry records, or `nothing` where it records none.
-function registered_tree(settings::Settings, version)
+# The versions of the package that the registry records, each with its information, or `nothing` where the registry doesn't know the package.
+function registered(settings::Settings)
     instance = registry(settings)
     instance === nothing && return nothing
     entry = get(instance, UUID(head_project(settings)["uuid"]), nothing)
     entry === nothing && return nothing
     # Pkg's registry API changed in Julia 1.13, which passes the registry with the entry.
     info = applicable(Pkg.Registry.registry_info, instance, entry) ? Pkg.Registry.registry_info(instance, entry) : Pkg.Registry.registry_info(entry)
-    version_info = get(info.version_info, version, nothing)
+    return info.version_info
+end
+
+# The tree of the package's `version` that the registry records, or `nothing` where it records none.
+function registered_tree(settings::Settings, version)
+    versions = registered(settings)
+    version_info = versions === nothing ? nothing : get(versions, version, nothing)
     return version_info === nothing ? nothing : string(version_info.git_tree_sha1)
 end
+
+# Every version of the package that the registry records, in order; none for a package that it doesn't know.
+registered_versions(settings::Settings) = (versions = registered(settings); versions === nothing ? VersionNumber[] : sort!(collect(keys(versions))))

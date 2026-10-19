@@ -47,9 +47,9 @@ end
         git(directory, "tag", "-d", "v0.2.0")
         @test fails(on("release/v0.2.0"; RELEASEFLOW_REGISTRY = registry("0.2.0" => tree(directory, released))), "already records 0.2.0")
         @test passes(on("release/v0.2.0"; RELEASEFLOW_REGISTRY = registry("0.2.0" => tree(directory, "release/v0.2.0"))))
-        # The first release, before master has a version.
+        # Without a version on master, the release would be the initial one, which the repository's tag v0.1.0 contradicts.
         git(directory, "update-ref", "-d", "refs/remotes/origin/master")
-        @test passes(on("release/v0.2.0"))
+        @test fails(on("release/v0.2.0"), "already has the version tags v0.1.0")
     end
 
     @testset "changelog" begin
