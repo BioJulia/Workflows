@@ -16,6 +16,8 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - CI: the tests, Runic, actionlint, and the pins of the workflows' calls of the action.
 - TagBot, which tags the releases of ReleaseFlow, registered from `ReleaseFlow/`, as `ReleaseFlow-vX.Y.Z`.
 - This repository follows gitflow, with `master` and `develop`, and checks its own pull requests with its reusable gitflow and back-merge workflows.
+- The back-merge job runs in the deployment environment `releaseflow`, whose secrets reach only the main branch, and takes the app's client ID, `RELEASEFLOW_APP_CLIENT_ID`, as `actions/create-github-app-token` v3 does.
+- The workflows and the action pin the actions of other owners to commits, which Dependabot updates, and `.github/CODEOWNERS` requires a maintainer's review of the workflows and the action.
 - The README explains how to create the ReleaseFlow token, `RELEASEFLOW_TOKEN`, and store it as a repository or organization secret.
-- The back-merge workflow opens its pull request with a GitHub App's token, from the secrets `RELEASEFLOW_APP_ID` and `RELEASEFLOW_APP_PRIVATE_KEY`, in preference to `RELEASEFLOW_TOKEN`; the README explains how to create the app.
+- The back-merge workflow opens its pull request with a GitHub App's token, from the secrets `RELEASEFLOW_APP_CLIENT_ID` and `RELEASEFLOW_APP_PRIVATE_KEY`, in preference to `RELEASEFLOW_TOKEN`; the README explains how to create the app.
 - The back-merge workflow creates its branch with the job's own token, so the app or personal token needs only read and write access to pull requests; where GitHub refuses the job's token the branch, the other token creates it, with access to contents and workflows.

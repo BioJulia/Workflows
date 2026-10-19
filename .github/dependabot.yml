@@ -1,0 +1,13 @@
+# Dependabot keeps the commits that the workflows and the action pin their actions to current, with weekly pull requests.
+# Its pull requests carry the `skip changelog` label, since an action's update isn't a change for the workflows' users.
+version: 2
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    labels:
+      - "skip changelog"
+    # The workflows call this repository's own action at their release, which the release process sets.
+    ignore:
+      - dependency-name: "BioJulia/Workflows"
