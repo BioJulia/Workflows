@@ -66,4 +66,4 @@ runs:
       run: |
         export RELEASEFLOW_BASE_REF="${BASE_REF_INPUT:-origin/$RELEASEFLOW_BASE_BRANCH}"
         export RELEASEFLOW_DEVELOP_REF="origin/$RELEASEFLOW_DEVELOP_BRANCH"
-        julia --startup-file=no --project="$GITHUB_ACTION_PATH/ReleaseFlow" "$GITHUB_ACTION_PATH/ReleaseFlow/main.jl" "$CHECK"
+        julia --startup-file=no --project="$GITHUB_ACTION_PATH/ReleaseFlow" -m ReleaseFlow "$CHECK"
