@@ -48,12 +48,12 @@ end
     git(work, "fetch", "-q", "origin")
     log = joinpath(directory, "log")
 
-    function step(; has_token = "true", open = "0", project = "", refuse_default = false)
+    function step(; has_token = "true", open = "0", project = "", refuse_default = false, from = "", into = "")
         write(log, "")
         environment = Dict(
             "PATH" => "$(bin):$(ENV["PATH"])", "LOG" => log, "ORIGIN" => origin, "GH_TOKEN" => has_token == "true" ? "token" : "default", "HAS_TOKEN" => has_token,
             "DEFAULT_TOKEN" => "default", "REFUSE_DEFAULT" => refuse_default ? "1" : "",
-            "REPOSITORY" => "Example/Toy.jl", "RELEASEFLOW_MAIN_BRANCH" => "master", "RELEASEFLOW_DEVELOP_BRANCH" => "develop", "OPEN_PRS" => open, "RELEASEFLOW_PROJECT" => project,
+            "REPOSITORY" => "Example/Toy.jl", "RELEASEFLOW_MAIN_BRANCH" => "master", "RELEASEFLOW_DEVELOP_BRANCH" => "develop", "OPEN_PRS" => open, "RELEASEFLOW_PROJECT" => project, "FROM" => from, "INTO" => into,
         )
         output = IOBuffer()
         process = run(pipeline(Cmd(addenv(`bash $(script)`, environment); dir = work, ignorestatus = true); stdout = output, stderr = output))
@@ -93,7 +93,7 @@ end
     branch!(work, "master", "master")
     git(work, "fetch", "-q", "origin")
     result = step()
-    @test result.code == 0 && occursin("there's nothing to bring back", result.output) && isempty(result.calls)
+    @test result.code == 0 && occursin("there's nothing to bring", result.output) && isempty(result.calls)
     # A package in a subdirectory names the branch from its own Project.toml.
     commit!(work, "Subdirectory", "lib/Toy/Project.toml" => project("0.3.0"), "subdirectory.txt" => "x")
     git(work, "push", "-q", "origin", "master")
@@ -104,4 +104,21 @@ end
     commit!(work, "Bad version", "Project.toml" => replace(project("0.1.0"), "0.1.0" => "0.1"))
     result = step()
     @test result.code == 1 && occursin("Project.toml on master has no version of the form X.Y.Z", result.output)
+    # From any other branch, such as a maintenance branch into master, the branch is named after the branch and its commit.
+    branch!(work, "maintenance/1.x", "origin/master")
+    maintenance = commit!(work, "A fix for 1.x", "maintenance.txt" => "fix")
+    git(work, "push", "-q", "origin", "maintenance/1.x")
+    git(work, "fetch", "-q", "origin")
+    result = step(; from = "maintenance/1.x", into = "master")
+    branch = "back-merge/maintenance-1.x-$(first(maintenance, 7))"
+    @test result.code == 0
+    @test git(origin, "rev-parse", "refs/heads/$(branch)") == maintenance
+    create = only(filter(call -> startswith(call, "gh pr create"), result.calls))
+    @test occursin("--head $(branch) --base master --title Merge maintenance/1.x into master", create)
+    @test occursin("This brings maintenance/1.x into master at its commit $(first(maintenance, 7)).", read(log, String))
+    # Nothing to bring once master has the commit.
+    git(work, "push", "-q", "origin", "maintenance/1.x:master")
+    git(work, "fetch", "-q", "origin")
+    result = step(; from = "maintenance/1.x", into = "master")
+    @test result.code == 0 && occursin("master already has maintenance/1.x's commit", result.output) && isempty(result.calls)
 end
