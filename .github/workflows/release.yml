@@ -1,0 +1,199 @@
+# Release: prepare a release or hotfix, its branch with the version, the changelog's section and the pins done, and its pull request, which the checks then pass.
+# Called from the repository's own workflow, started by hand from the Actions tab:
+#
+#   on:
+#     workflow_dispatch:
+#       inputs:
+#         kind:
+#           type: choice
+#           options: [release, hotfix]
+#         step:
+#           type: choice
+#           options: [auto, patch, minor, major]
+#   jobs:
+#     release:
+#       uses: BioJulia/Workflows/.github/workflows/release.yml@v1
+#       permissions:
+#         contents: read
+#       with:
+#         kind: ${{ inputs.kind }}
+#         step: ${{ inputs.step }}
+#       secrets:
+#         RELEASEFLOW_APP_CLIENT_ID: ${{ secrets.RELEASEFLOW_APP_CLIENT_ID }}
+#         RELEASEFLOW_APP_PRIVATE_KEY: ${{ secrets.RELEASEFLOW_APP_PRIVATE_KEY }}
+#         RELEASEFLOW_TOKEN: ${{ secrets.RELEASEFLOW_TOKEN }}
+#
+# A release starts from develop under gitflow, and from the main branch otherwise; a hotfix starts from the main branch, or under OneFlow from the last release's tag.
+# The step `auto` reads the changelog's unreleased section: `### Breaking` takes a breaking version, `### Added` the next minor version, and anything else the next patch; a hotfix is always the next patch, and its section waits for the fix's entry, so its pull request is a draft.
+# The branch and pull request need a token other than GITHUB_TOKEN, whose pull requests start no checks, and which can't push workflow files: the ReleaseFlow app's, from RELEASEFLOW_APP_CLIENT_ID and RELEASEFLOW_APP_PRIVATE_KEY, or the personal access token RELEASEFLOW_TOKEN.
+# The job runs in the deployment environment `environment`, `releaseflow` unless given, which keeps those secrets and allows the main and develop branches.
+name: "Reusable: Release"
+
+on:
+  workflow_call:
+    inputs:
+      model:
+        description: The branching model, `gitflow`, `oneflow` or `trunk`.
+        type: string
+        default: gitflow
+      kind:
+        description: The kind of release, `release` or `hotfix`.
+        type: string
+        default: release
+      step:
+        description: The step of the version, `auto`, `patch`, `minor` or `major`.
+        type: string
+        default: auto
+      main-branch:
+        description: The branch of releases.
+        type: string
+        default: main
+      develop-branch:
+        description: The branch of unreleased work, for gitflow.
+        type: string
+        default: develop
+      project:
+        description: The package's directory, relative to the repository's root, for a package in a subdirectory.
+        type: string
+        default: ''
+      pin-action:
+        description: 'An action, such as `BioJulia/Workflows`, whose `uses: …@vX.Y.Z` pins in the workflows take the new version.'
+        type: string
+        default: ''
+      check-links:
+        description: Whether to set the changelog's comparison links.
+        type: boolean
+        default: true
+      registry:
+        description: The registry of the package's releases.
+        type: string
+        default: General
+      environment:
+        description: The deployment environment that holds the secrets, limited to the main and develop branches.
+        type: string
+        default: releaseflow
+    secrets:
+      RELEASEFLOW_APP_CLIENT_ID:
+        description: The client ID of the ReleaseFlow app, a GitHub App installed on the repository.
+        required: false
+      RELEASEFLOW_APP_PRIVATE_KEY:
+        description: A private key of the ReleaseFlow app.
+        required: false
+      RELEASEFLOW_TOKEN:
+        description: A personal access token, where there's no ReleaseFlow app.
+        required: false
+
+permissions: {}
+
+jobs:
+  prepare:
+    name: Prepare
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    # The branch and pull request take the ReleaseFlow app's token, or the personal one; the job's own only reads.
+    permissions:
+      contents: read
+    steps:
+      # Secrets can't be tested in a step's condition, so this step tells whether a GitHub App is given.
+      - id: app-given
+        env:
+          CLIENT_ID: ${{ secrets.RELEASEFLOW_APP_CLIENT_ID }}
+        run: echo "given=$([ -n "$CLIENT_ID" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+      - id: app
+        if: steps.app-given.outputs.given == 'true'
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          client-id: ${{ secrets.RELEASEFLOW_APP_CLIENT_ID }}
+          private-key: ${{ secrets.RELEASEFLOW_APP_PRIVATE_KEY }}
+      - name: Check for a token
+        env:
+          HAS_TOKEN: ${{ steps.app.outputs.token != '' || secrets.RELEASEFLOW_TOKEN != '' }}
+        run: |
+          if [ "$HAS_TOKEN" != "true" ]; then
+            echo "::error title=Release::Preparing a release needs the ReleaseFlow app's secrets, RELEASEFLOW_APP_CLIENT_ID and RELEASEFLOW_APP_PRIVATE_KEY, or RELEASEFLOW_TOKEN, since the default token's pull requests start no checks."
+            exit 1
+          fi
+      # A release starts from develop under gitflow, and from the main branch otherwise, as does a hotfix.
+      - id: start
+        env:
+          RELEASEFLOW_MODEL: ${{ inputs.model }}
+          RELEASEFLOW_KIND: ${{ inputs.kind }}
+          RELEASEFLOW_MAIN_BRANCH: ${{ inputs.main-branch }}
+          RELEASEFLOW_DEVELOP_BRANCH: ${{ inputs.develop-branch }}
+        run: |
+          if [ "$RELEASEFLOW_MODEL" = gitflow ] && [ "$RELEASEFLOW_KIND" = release ]; then
+            echo "ref=$RELEASEFLOW_DEVELOP_BRANCH" >> "$GITHUB_OUTPUT"
+          else
+            echo "ref=$RELEASEFLOW_MAIN_BRANCH" >> "$GITHUB_OUTPUT"
+          fi
+      # With the token that pushes the branch, which may carry workflow files.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ steps.start.outputs.ref }}
+          fetch-depth: 0
+          token: ${{ steps.app.outputs.token || secrets.RELEASEFLOW_TOKEN }}
+      - name: Start a OneFlow hotfix from the last release's tag
+        if: inputs.model == 'oneflow' && inputs.kind == 'hotfix'
+        env:
+          RELEASEFLOW_PROJECT: ${{ inputs.project }}
+        run: |
+          set -euo pipefail
+          version=$(sed -n 's/^version = "\(.*\)"$/\1/p' "${RELEASEFLOW_PROJECT:+${RELEASEFLOW_PROJECT%/}/}Project.toml")
+          git switch --detach "v$version"
+      - id: prepare
+        uses: BioJulia/Workflows@v1.0.1
+        with:
+          check: prepare
+          model: ${{ inputs.model }}
+          project: ${{ inputs.project }}
+          kind: ${{ inputs.kind }}
+          step: ${{ inputs.step }}
+          main-branch: ${{ inputs.main-branch }}
+          develop-branch: ${{ inputs.develop-branch }}
+          base-ref: origin/${{ inputs.main-branch }}
+          pin-action: ${{ inputs.pin-action }}
+          check-links: ${{ inputs.check-links }}
+          registry: ${{ inputs.registry }}
+      - name: Push the branch and open the pull request
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token || secrets.RELEASEFLOW_TOKEN }}
+          APP_SLUG: ${{ steps.app.outputs.app-slug }}
+          REPOSITORY: ${{ github.repository }}
+          RELEASEFLOW_KIND: ${{ inputs.kind }}
+          VERSION: ${{ steps.prepare.outputs.version }}
+          BRANCH: ${{ steps.prepare.outputs.branch }}
+          BASE: ${{ steps.prepare.outputs.base }}
+          NOTES: ${{ steps.prepare.outputs.notes }}
+        run: |
+          set -euo pipefail
+          # A release's branch is new; one that exists is an earlier preparation, which a maintainer finishes or deletes.
+          if git ls-remote --exit-code --heads origin "$BRANCH" > /dev/null; then
+            echo "::error title=Release::The branch $BRANCH exists already; finish its release, or delete the branch to prepare it again."
+            exit 1
+          fi
+
+          # The commit is the app's bot's, or, with a personal token, GitHub Actions'.
+          if [ -n "$APP_SLUG" ]; then
+            name="${APP_SLUG}[bot]"
+            email="$(gh api "users/$name" --jq .id)+$name@users.noreply.github.com"
+          else
+            name="github-actions[bot]"
+            email="41898282+github-actions[bot]@users.noreply.github.com"
+          fi
+          if [ "$RELEASEFLOW_KIND" = hotfix ]; then title="Hotfix $VERSION"; else title="Release $VERSION"; fi
+          git switch -q -c "$BRANCH"
+          git -c user.name="$name" -c user.email="$email" commit -q -a -m "$title"
+          git push -q origin "$BRANCH"
+          echo "Pushed the branch $BRANCH."
+
+          body="This prepares the $RELEASEFLOW_KIND $VERSION: its version in Project.toml, its section of the changelog, with its links, and its pins.
+
+          $NOTES"
+          draft=false
+          if [ "$RELEASEFLOW_KIND" = hotfix ]; then
+            body="$body
+
+          Push the fix, with its entry in the section of $VERSION, and mark the pull request ready for review."
+            draft=true
+          fi
+          gh pr create --repo "$REPOSITORY" --base "$BASE" --head "$BRANCH" --title "$title" --body "$body" --draft="$draft"
