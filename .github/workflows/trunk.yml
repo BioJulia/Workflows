@@ -14,7 +14,7 @@
 # A pull request that changes the version is a release: Release, Version, Changelog and Breaking changes.
 # Any other: Release and Changelog entry, unless `require-entry` is false, for a changelog without an unreleased section.
 # The checks that don't apply are skipped, and a skipped check counts as passed, so the ruleset may require every check, as "trunk / Version" and so on.
-name: Trunk
+name: "Reusable: Trunk"
 
 on:
   workflow_call:
