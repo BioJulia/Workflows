@@ -94,12 +94,11 @@ end
 
 check_breaking_version(settings::Settings, ::Branch{Hotfix}, head, base) = failure(settings, "Breaking changes", "A hotfix may not make breaking changes to $(base); release the change from a release branch with a breaking version.")
 
-function check(::BreakingCheck, settings::Settings)
-    release = last_release(settings)
-    if release === nothing
-        note("There's no earlier release, so there's nothing to break.")
-        return
-    end
+check(::BreakingCheck, settings::Settings) = check_breaking(settings, last_release(settings))
+
+check_breaking(settings::Settings, ::InitialRelease) = note("This is the initial release, so there's nothing to break.")
+
+function check_breaking(settings::Settings, release::LastRelease)
     head = head_version(settings)
     name = head_project(settings)["name"]
     narrowed, widened = compat_changes(TOML.parse(file_at(settings, release.ref, package_path(settings, "Project.toml"))), head_project(settings))

@@ -27,11 +27,25 @@ function check(::ChangelogCheck, settings::Settings)
     end
 
     release = last_release(settings)
-    released = release === nothing ? nothing : file_at(settings, release.ref, package_path(settings, "CHANGELOG.md"))
+    check_history(settings, parsed, version, release)
+    settings.check_links && check_links(settings, text, parsed, release)
+    println("Changelog: the section of $(version) has $(length(entries(parsed[index]))) entries.")
+    return
+end
+
+# A release's section is new: the last release's changelog hasn't one.
+function check_history(settings::Settings, parsed, version, release::LastRelease)
+    released = file_at(settings, release.ref, package_path(settings, "CHANGELOG.md"))
     if released !== nothing && any(section -> is_version(section, version), sections(released))
         failure(settings, "Changelog", "The section of $(version) is already in the changelog of $(label(release)); a release adds a new section.")
     end
-    settings.check_links && check_links(settings, text, parsed)
-    println("Changelog: the section of $(version) has $(length(entries(parsed[index]))) entries.")
+    return
+end
+
+# An initial release's changelog describes no earlier release.
+function check_history(settings::Settings, parsed, version, ::InitialRelease)
+    for earlier in filter(!=(version), versions(parsed))
+        failure(settings, "Changelog", "CHANGELOG.md has a section for $(earlier), but $(version) is the initial release; describe its changes in its own section.")
+    end
     return
 end

@@ -112,7 +112,11 @@ end
 
 # Each version's heading links to the comparison of its tag with the tag of the version below it, or for the oldest version to its own tag or a comparison with an earlier one, and the unreleased heading, `## [Unreleased]`, to the comparison of the newest version's tag with `HEAD`.
 # Tags are spelled `vX.Y.Z`, as TagBot spells them.
-function check_links(settings::Settings, text, parsed)
+# After the initial release, the oldest version's link may compare with an earlier tag, as a changelog begun after earlier releases does; the initial release's links to its own tag.
+compares_earlier(::LastRelease) = true
+compares_earlier(::InitialRelease) = false
+
+function check_links(settings::Settings, text, parsed, release::Baseline)
     url = repository_url(settings)
     url === nothing && (failure(settings, "Changelog", "The repository's URL is unknown, so the links of CHANGELOG.md can't be checked; set `GITHUB_REPOSITORY`, such as `owner/Package.jl`."); return)
     definitions = links(text)
@@ -122,7 +126,7 @@ function check_links(settings::Settings, text, parsed)
         actual = get(definitions, string(version), get(definitions, "v$(version)", nothing))
         if actual === nothing
             failure(settings, "Changelog", "CHANGELOG.md has no link for $(version); add `[$(version)]: $(expected)` at its end.")
-        elseif actual != expected && !(index == length(released) && from_earlier(actual, url, version))
+        elseif actual != expected && !(index == length(released) && compares_earlier(release) && from_earlier(actual, url, version))
             failure(settings, "Changelog", "The link for $(version) in CHANGELOG.md is $(actual), but it should be $(expected).")
         end
     end
