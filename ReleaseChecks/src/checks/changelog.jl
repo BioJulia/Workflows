@@ -27,7 +27,7 @@ function check(::ChangelogCheck, settings::Settings)
     end
 
     release = last_release(settings)
-    released = release === nothing ? nothing : file_at(settings, release.ref, "CHANGELOG.md")
+    released = release === nothing ? nothing : file_at(settings, release.ref, package_path(settings, "CHANGELOG.md"))
     if released !== nothing && any(section -> is_version(section, version), sections(released))
         failure(settings, "Changelog", "The section of $(version) is already in the changelog of $(label(release)); a release adds a new section.")
     end

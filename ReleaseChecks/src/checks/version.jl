@@ -51,11 +51,11 @@ function check(::VersionCheck, settings::Settings)
     check_name(settings, branch, head)
 
     # A release may be registered and tagged before it merges, as OneFlow does, but only at this commit.
-    head_tree = tree_of(settings, settings.head_sha)
+    head_tree = package_tree(settings, settings.head_sha)
     registered = registered_tree(settings, head)
     registered === nothing || registered == head_tree || failure(settings, "Version", "$(registry_name(settings)) already records $(head), with another tree; a release takes a new version.")
     tag = "v$(head)"
-    has_tag(settings, tag) && tree_of(settings, tag) != head_tree && failure(settings, "Version", "The version $(head) is already tagged, $(tag), at another commit; a release takes a new version.")
+    has_tag(settings, tag) && package_tree(settings, tag) != head_tree && failure(settings, "Version", "The version $(head) is already tagged, $(tag), at another commit; a release takes a new version.")
 
     if base === nothing
         note("$(settings.base_ref) has no version, so $(head) is the first release.")

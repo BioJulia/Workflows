@@ -43,8 +43,8 @@ function find_last_release(settings::Settings, version)
             failure(settings, "Release", "$(name) records the tree $(tree) for $(version), but no branch or tag has a commit with it; fetch the whole history, or tag the release.")
             return nothing
         end
-        if tagged && tree_of(settings, tag) != tree
-            failure(settings, "Release", "The tag $(tag) isn't the release of $(version) that $(name) records: its tree is $(tree_of(settings, tag)), but the registered tree is $(tree), of the commit $(commit); move the tag.")
+        if tagged && package_tree(settings, tag) != tree
+            failure(settings, "Release", "The tag $(tag) isn't the release of $(version) that $(name) records: its tree is $(package_tree(settings, tag)), but the registered tree is $(tree), of the commit $(commit); move the tag.")
         end
         println("The last release, $(version), is the commit $(first(commit, 7)), which $(name) records$(tagged ? " and $(tag) tags" : "").")
         return LastRelease{Registered}(version, commit)

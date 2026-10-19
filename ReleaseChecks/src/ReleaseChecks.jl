@@ -28,6 +28,7 @@ Inputs are environment variables, so that branch names never reach a shell, and 
 - `DEVELOP_REF`, `origin/<DEVELOP_BRANCH>` unless given;
 - `SKIP_CHANGELOG`, `true` where the pull request has the label `SKIP_LABEL`, `skip changelog` unless given, for `entry`;
 - `CHECK_LINKS`, whether the changelog's comparison links are checked, `true` unless given;
+- `PROJECT`, the package's directory, relative to the repository's root, for a package in a subdirectory; the root unless given;
 - `REGISTRY`, the name of an installed registry, or the path of a registry's directory, `General` unless given.
 The base's files are read with `git show`, and a base without them, as before the first release, has no version and no changelog.
 """
