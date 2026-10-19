@@ -1,6 +1,6 @@
 name = "ReleaseFlow"
 uuid = "0b38582b-4297-4346-83b3-5ff614b8a115"
-version = "0.1.0"
+version = "1.0.0"
 authors = ["BioJulia"]
 
 [deps]
