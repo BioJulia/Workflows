@@ -4,7 +4,10 @@ name: CI
 on:
   push:
     branches:
-      - main
+      - master
+      - develop
+      - release/*
+      - hotfix/*
     tags: ['v*']
   pull_request:
   workflow_dispatch:
@@ -56,6 +59,6 @@ jobs:
       - name: Check that the workflows call the action at one release
         env:
           TAG: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
-          # A pull request into the main branch is a release, which calls the action at its own version.
-          RELEASE: ${{ github.base_ref == 'main' }}
+          # A pull request into master is a release, which calls the action at its own version.
+          RELEASE: ${{ github.base_ref == 'master' }}
         run: .github/scripts/check_pins.sh

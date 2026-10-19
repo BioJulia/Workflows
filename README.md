@@ -144,17 +144,26 @@ julia --project=ReleaseFlow/test -e 'using Pkg; Pkg.instantiate()'
 julia --project=ReleaseFlow/test ReleaseFlow/test/runtests.jl
 ```
 
-The reusable workflows call the action at the release that they belong to, such as `BioJulia/Workflows@v1.0.0`, so that a workflow and its checks come from one release.
-To release the workflows:
-1. set every `uses: BioJulia/Workflows@…` in `.github/workflows/` to the new release, and move the changelog's unreleased entries into its section;
-2. tag the release, such as `v1.0.1`, which the CI's Pins check verifies;
-3. move the major tag, `v1`, to it, with `git tag -f v1 v1.0.1` and `git push -f origin v1`.
+## Contributing
 
-A breaking change to a workflow's inputs, jobs or check names takes a new major tag, `v2`.
+This repository follows gitflow, with `master` and `develop`, and checks its own pull requests with its reusable gitflow workflow, through [`GitflowChecks.yml`](.github/workflows/GitflowChecks.yml):
+- features and fixes branch from `develop`, add an entry under `## [Unreleased]` in [`ReleaseFlow/CHANGELOG.md`](ReleaseFlow/CHANGELOG.md), and merge back by pull request;
+- a release branches from `develop` as `release/vX.Y.Z`, and a hotfix from `master` as `hotfix/vX.Y.Z`; either merges into `master` by pull request, and the Back-merge workflow then opens the pull request that brings `master` back into `develop`.
 
-To release ReleaseFlow:
-1. set its new version in `ReleaseFlow/Project.toml`, and move the unreleased entries of `ReleaseFlow/CHANGELOG.md` into its section;
-2. comment `@JuliaRegistrator register subdir=ReleaseFlow` on the commit, which registers it in General from the subdirectory;
+The workflows and ReleaseFlow share one version, in `ReleaseFlow/Project.toml`, and one changelog.
+The reusable workflows call the action at the release that they belong to, such as `BioJulia/Workflows@v1.0.0`, so that a workflow and its checks come from one release; the CI's Pins check holds them to it.
+
+A release or hotfix branch:
+1. sets its version in `ReleaseFlow/Project.toml`;
+2. sets every `uses: BioJulia/Workflows@…` in `.github/workflows/` to that version, `vX.Y.Z`;
+3. moves the changelog's unreleased entries into a `## [X.Y.Z]` section, with its comparison link.
+
+Once it merges into `master`:
+1. tag the merge commit `vX.Y.Z`, and move the major tag to it, with `git tag -f v1 vX.Y.Z` and `git push -f origin v1`;
+2. comment `@JuliaRegistrator register subdir=ReleaseFlow` on the commit, which registers ReleaseFlow in General from its subdirectory;
 3. once General merges the registration, TagBot tags the commit `ReleaseFlow-vX.Y.Z`.
 
-A release of the workflows carries the copy of ReleaseFlow at its tag, so a fix to the checks reaches the workflows' users with the workflows' next release, and reaches `]add ReleaseFlow` with the package's.
+A breaking change to a workflow's inputs, jobs or check names, or to ReleaseFlow's public API, takes a new major version, and a new major tag, such as `v2`.
+
+The repository's own pull requests are checked by the released checks, at the action's pins, while CI tests the pull request's own.
+So the first release, `v1.0.0`, can't be checked before it's tagged: require the Gitflow checks in the rulesets of `master` and `develop` once it is.

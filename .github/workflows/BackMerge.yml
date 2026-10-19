@@ -1,0 +1,21 @@
+# Once a release or hotfix merges into master, this repository's reusable back-merge workflow opens the pull request that brings master back into develop.
+name: Back-merge
+
+on:
+  push:
+    branches:
+      - master
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  back-merge:
+    uses: ./.github/workflows/back-merge.yml
+    permissions:
+      contents: write
+      pull-requests: write
+    with:
+      main-branch: master
+    secrets:
+      RELEASEFLOW_TOKEN: ${{ secrets.RELEASEFLOW_TOKEN }}
