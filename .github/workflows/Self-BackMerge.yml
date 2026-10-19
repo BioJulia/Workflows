@@ -1,0 +1,25 @@
+# This repository's own caller of the reusable back-merge.yml, which other repositories call as BioJulia/Workflows/.github/workflows/back-merge.yml@v1; the Self- files apply this repository's workflows to itself.
+# Once a release or hotfix merges into master, this repository's reusable back-merge workflow opens the pull request that brings master back into develop.
+name: "Self: Back-merge"
+
+on:
+  push:
+    branches:
+      - master
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  back-merge:
+    uses: ./.github/workflows/back-merge.yml
+    permissions:
+      contents: write
+      pull-requests: write
+    with:
+      main-branch: master
+      project: ReleaseFlow
+    secrets:
+      RELEASEFLOW_APP_CLIENT_ID: ${{ secrets.RELEASEFLOW_APP_CLIENT_ID }}
+      RELEASEFLOW_APP_PRIVATE_KEY: ${{ secrets.RELEASEFLOW_APP_PRIVATE_KEY }}
+      RELEASEFLOW_TOKEN: ${{ secrets.RELEASEFLOW_TOKEN }}

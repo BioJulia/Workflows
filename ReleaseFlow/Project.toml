@@ -1,0 +1,15 @@
+name = "ReleaseFlow"
+uuid = "0b38582b-4297-4346-83b3-5ff614b8a115"
+version = "1.0.0"
+authors = ["BioJulia"]
+
+[deps]
+Pkg = "44cfe95a-1eb2-52ea-b672-e2afdf69b78f"
+TOML = "fa267f1f-6049-4f14-aa54-33bafae1ed76"
+UUIDs = "cf7118a7-6976-5b1a-9a39-7adc72f591a4"
+
+[compat]
+Pkg = "1"
+TOML = "1"
+UUIDs = "1"
+julia = "1.12"
