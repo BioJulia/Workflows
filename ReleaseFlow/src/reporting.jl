@@ -24,6 +24,9 @@ end
 
 note(message) = println("::notice::", replace(message, "\n" => "%0A"))
 
+# A warning, which GitHub Actions shows on the run without failing it.
+warning(title, message) = println("::warning title=$(title)::", replace(message, "\n" => "%0A"))
+
 # Append Markdown to the job's summary, which GitHub Actions shows on the run's page.
 function summary(settings::Settings, text)
     isempty(settings.step_summary) || open(io -> println(io, text), settings.step_summary, "a")

@@ -58,6 +58,7 @@ include("checks/entry.jl")
 include("checks/is_release.jl")
 include("checks/breaking.jl")
 include("checks/prepare.jl")
+include("checks/registration.jl")
 
 const USAGE = "usage: RELEASEFLOW_MODEL=$(join(sort(collect(keys(MODELS))), '|')) julia -m ReleaseFlow $(join(sort(collect(keys(CHECKS))), '|'))"
 
