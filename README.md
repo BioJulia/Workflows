@@ -85,7 +85,7 @@ A package can follow the major tag, `v1`, or pin a release, such as `v1.0.0`; De
 | `skip-label` | `skip changelog` | gitflow, oneflow, trunk | The label that exempts a pull request from the changelog entry. |
 | `check-links` | `true` | gitflow, oneflow, trunk | Whether to check the changelog's comparison links. |
 | `require-entry` | `true` | trunk | Whether a pull request that isn't a release must add a changelog entry, for a changelog without an unreleased section. |
-| `project` | the root | gitflow, oneflow, trunk | The package's directory, for a package in a subdirectory, such as `lib/Toy`. |
+| `project` | the root | gitflow, back-merge, oneflow, trunk | The package's directory, for a package in a subdirectory, such as `lib/Toy`. |
 | `registry` | `General` | gitflow, oneflow, trunk | The registry of the package's releases. |
 
 For example, `with: { main-branch: main }` for a gitflow repository whose main branch is `main`.

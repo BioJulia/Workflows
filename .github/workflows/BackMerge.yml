@@ -17,5 +17,6 @@ jobs:
       pull-requests: write
     with:
       main-branch: master
+      project: ReleaseChecks
     secrets:
       BACK_MERGE_TOKEN: ${{ secrets.BACK_MERGE_TOKEN }}
