@@ -100,12 +100,34 @@ For example, `with: { main-branch: main }` for a gitflow repository whose main b
   The checks that don't apply to a pull request are skipped, and GitHub counts a skipped check as passed, so a ruleset can require all of them.
   GitHub only offers a check's name once it has run, and only enforces rulesets on a private repository with a paid plan.
 - **The label.** Create the `skip changelog` label, for changes that users won't notice.
-- **The back-merge token.** Pull requests opened with the default `GITHUB_TOKEN` don't start workflows, so their checks would never report.
-  Add the secret `BACK_MERGE_TOKEN`: a fine-grained personal access token, or a GitHub App's token, with read and write access to the repository's contents, pull requests and workflows.
+- **The back-merge token.** Pull requests opened with the default `GITHUB_TOKEN` don't start workflows, so their checks would never report; the secret `BACK_MERGE_TOKEN` opens them instead, as described in [Creating the back-merge token](#creating-the-back-merge-token).
   Without it, the back-merge pull request says to close and reopen it, which starts the checks.
-  Either way, allow GitHub Actions to create pull requests, in Settings → Actions → General.
+  Either way, allow GitHub Actions to create pull requests, in the repository's Settings → Actions → General → Workflow permissions → "Allow GitHub Actions to create and approve pull requests".
 - **Code owners.** A pull request runs its own copy of its workflow files, so a `CODEOWNERS` entry for `/.github/workflows/`, with the ruleset requiring a code owner's review, keeps a pull request from changing which checks it runs.
 - **Forks.** The checks look at the pull request's head commit and this repository's branches, so they work the same for pull requests from forks; GitHub asks a maintainer to approve the workflows of a first-time contributor.
+
+### Creating the back-merge token
+
+The token is a fine-grained personal access token, which the back-merge workflow uses to create the `back-merge/vX.Y.Z` branch and open its pull request.
+GitHub shows the token's owner as the pull request's author, so prefer a maintainers' machine account, such as a bot account of the organization, to a person's: an author can't approve their own pull request, and the token outlives a maintainer's involvement.
+
+1. Signed in as the token's owner, open Settings → Developer settings → Personal access tokens → Fine-grained tokens, and choose "Generate new token".
+2. Name it, such as `BACK_MERGE_TOKEN for <organization>`, and set an expiration; the organization may cap it, and the token must be regenerated and the secret updated before it expires.
+3. Set the resource owner to the organization that owns the repositories, rather than the account; an organization that reviews fine-grained tokens holds it as pending until an owner approves it, in the organization's Settings → Personal access tokens → Pending requests.
+4. Under repository access, choose "Only select repositories", and select the repositories that use the back-merge workflow.
+5. Under repository permissions, set:
+   - Contents: Read and write, to create the branch;
+   - Pull requests: Read and write, to open the pull request;
+   - Workflows: Read and write, since the branch carries the main branch's workflow files, which may differ from `develop`'s.
+
+   Metadata: Read-only is added by itself; leave every other permission at no access.
+6. Choose "Generate token", and copy it; GitHub shows it only once.
+7. Store it as a secret named `BACK_MERGE_TOKEN`, in either:
+   - the repository's Settings → Secrets and variables → Actions → New repository secret, for one repository;
+   - the organization's Settings → Secrets and variables → Actions → New organization secret, with access for the selected repositories, so that one token serves every repository that uses the workflow.
+
+The caller passes the secret to the reusable workflow, as `secrets: BACK_MERGE_TOKEN: ${{ secrets.BACK_MERGE_TOKEN }}`; the token never needs to appear anywhere else.
+To check it, run the caller's Back-merge workflow from the Actions tab, with "Run workflow": it opens the pull request if `develop` lacks the main branch's commit, and its checks start.
 
 ## The checks
 

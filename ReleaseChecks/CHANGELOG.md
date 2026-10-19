@@ -16,3 +16,4 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - CI: the tests, Runic, actionlint, and the pins of the workflows' calls of the action.
 - TagBot, which tags the releases of ReleaseChecks, registered from `ReleaseChecks/`, as `ReleaseChecks-vX.Y.Z`.
 - This repository follows gitflow, with `master` and `develop`, and checks its own pull requests with its reusable gitflow and back-merge workflows.
+- The README explains how to create the back-merge token, `BACK_MERGE_TOKEN`, and store it as a repository or organization secret.
