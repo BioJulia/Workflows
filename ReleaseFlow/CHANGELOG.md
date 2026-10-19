@@ -6,6 +6,8 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+- The breaking check counts a name that still resolves as provided, such as an old name kept with `Base.@deprecate_binding`, which Julia's `names` leaves out; a rename through a deprecated binding is no longer reported as a removal.
+
 ## [1.0.0] - 2026-10-19
 
 - ReleaseFlow, the checks of the pull requests of a Julia package under gitflow, OneFlow and trunk: source branches and where they came from, versions, changelogs with comparison links, breaking changes to the public API, tests and compat bounds, and changelog entries.

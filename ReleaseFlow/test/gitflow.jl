@@ -154,6 +154,10 @@ end
         @test occursin("Toy.triple", result.output)
         release!(directory, "release/v0.2.0", feature, "0.2.0"; files = ["src/Toy.jl" => removed], log = changelog(released = ["0.2.0" => ["A feature."], "0.1.0" => ["First."]], breaking = ["Remove `triple`."]))
         @test passes(on("release/v0.2.0"))
+        # A rename through a deprecated binding still provides the old name, which `names` leaves out.
+        renamed = replace(SOURCE, "export double, triple" => "export double, treble", "triple(x) = 3x" => "treble(x) = 3x\nBase.@deprecate_binding triple treble")
+        release!(directory, "release/v0.2.0", feature, "0.2.0"; files = ["src/Toy.jl" => renamed])
+        @test passes(on("release/v0.2.0"))
         release!(directory, "hotfix/v0.1.1", released, "0.1.1"; files = ["src/Toy.jl" => replace(SOURCE, "double(x; scale = 1) = 2x * scale" => "double(x) = 2x")])
         @test fails(on("hotfix/v0.1.1"), "A hotfix may not make breaking changes")
         release!(directory, "hotfix/v0.1.1", released, "0.1.1"; files = ["src/Toy.jl" => replace(SOURCE, "3x" => "3x + 1")])
