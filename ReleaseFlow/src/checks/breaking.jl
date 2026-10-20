@@ -33,12 +33,16 @@ function compat_changes(base_project, head_project)
     return narrowed, other
 end
 
+# The environment of the package's own processes: the check's, without its inputs and outputs, which the package's tests may read or pass on, as ReleaseFlow's own do.
+# Nor do they take the check's load path, such as the sandbox of a `Pkg.test` that runs the check, which lacks the standard library; each names its project.
+package_environment() = filter(((key, _),) -> !startswith(key, "RELEASEFLOW_") && !(key in ("GITHUB_OUTPUT", "GITHUB_STEP_SUMMARY", "JULIA_LOAD_PATH")), ENV)
+
 # Run Julia with `arguments`, a script or `-e` with code, in a fresh process in the project `directory`, and return whether it succeeded and what it wrote.
 function julia_in(directory, arguments::Cmd)
     output = IOBuffer()
     errors = IOBuffer()
     command = `$(Base.julia_cmd()) --startup-file=no --project=$(directory) $(arguments)`
-    process = run(pipeline(ignorestatus(Cmd(command; dir = directory)); stdout = output, stderr = errors))
+    process = run(pipeline(ignorestatus(Cmd(command; dir = directory, env = package_environment())); stdout = output, stderr = errors))
     return success(process), String(take!(output)), String(take!(errors))
 end
 

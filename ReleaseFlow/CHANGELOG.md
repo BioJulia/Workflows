@@ -7,6 +7,7 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 ## [Unreleased]
 
 - The breaking check counts a name that still resolves as provided, such as an old name kept with `Base.@deprecate_binding`, which Julia's `names` leaves out; a rename through a deprecated binding is no longer reported as a removal.
+- The breaking check runs the last release's tests without its own inputs, the `RELEASEFLOW_*` variables, and without `GITHUB_OUTPUT`, `GITHUB_STEP_SUMMARY` and `JULIA_LOAD_PATH`, which tests that run ReleaseFlow, as its own do, would otherwise inherit, such as the load path of a `Pkg.test` that lacks the standard library.
 
 ## [1.0.0] - 2026-10-19
 

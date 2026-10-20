@@ -146,6 +146,8 @@ end
         added = replace(SOURCE, "triple(x) = 3x" => "triple(x) = 3x\nquadruple(x) = 4x")
         release!(directory, "hotfix/v0.1.1", released, "0.1.1"; files = ["src/Toy.jl" => added])
         @test passes(on("hotfix/v0.1.1"))
+        # A load path without the standard library, such as that of a `Pkg.test` that runs the check, doesn't reach the package's processes.
+        @test passes(check(directory, "breaking"; RELEASEFLOW_HEAD_REF = "hotfix/v0.1.1", RELEASEFLOW_HEAD_SHA = "hotfix/v0.1.1", JULIA_LOAD_PATH = "@"))
         removed = replace(SOURCE, "triple(x) = 3x" => "")
         release!(directory, "release/v0.1.1", feature, "0.1.1"; files = ["src/Toy.jl" => removed])
         result = on("release/v0.1.1")
