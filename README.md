@@ -247,5 +247,6 @@ Every package that calls the workflows runs what their tags point to, so:
 - the workflows and the action pin the actions of other owners to commits, with their versions in comments, which Dependabot updates by pull request, labelled `skip changelog`;
 - `.github/CODEOWNERS` requires a maintainer's review of any change to the workflows or the action.
 
-The repository's own pull requests are checked by the released checks, at the action's pins, while CI tests the pull request's own.
+The repository's own pull requests are checked by the released checks, since `Self-Gitflow.yml` calls `gitflow.yml` at the major tag, `v1`, while CI tests the pull request's own.
+A release's pull request sets the workflows' calls of the action to its own tag, which only exists once it merges, so its checks are those of the release before it.
 So the first release, `v1.0.0`, can't be checked before it's tagged: require the Gitflow checks in the rulesets of `master` and `develop` once it is.
