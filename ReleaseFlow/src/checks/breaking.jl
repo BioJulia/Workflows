@@ -33,12 +33,16 @@ function compat_changes(base_project, head_project)
     return narrowed, other
 end
 
+# The environment of the package's own processes: the check's, without its inputs and outputs, which the package's tests may read or pass on, as ReleaseFlow's own do.
+# Nor do they take the check's load path, such as the sandbox of a `Pkg.test` that runs the check, which lacks the standard library; each names its project.
+package_environment() = filter(((key, _),) -> !startswith(key, "RELEASEFLOW_") && !(key in ("GITHUB_OUTPUT", "GITHUB_STEP_SUMMARY", "JULIA_LOAD_PATH")), ENV)
+
 # Run Julia with `arguments`, a script or `-e` with code, in a fresh process in the project `directory`, and return whether it succeeded and what it wrote.
 function julia_in(directory, arguments::Cmd)
     output = IOBuffer()
     errors = IOBuffer()
     command = `$(Base.julia_cmd()) --startup-file=no --project=$(directory) $(arguments)`
-    process = run(pipeline(ignorestatus(Cmd(command; dir = directory)); stdout = output, stderr = errors))
+    process = run(pipeline(ignorestatus(Cmd(command; dir = directory, env = package_environment())); stdout = output, stderr = errors))
     return success(process), String(take!(output)), String(take!(errors))
 end
 
@@ -64,26 +68,29 @@ function api_removals(settings::Settings, release::LastRelease, directory, name)
     return filter(!isempty, split(output, '\n'))
 end
 
-# Run the last release's tests against the head: a copy of the head with the release's `test/` directory.
+# Run the last release's tests against the head: a checkout of the head's commit with the release's `test/` directory.
+# The checkout is of the whole repository, so that tests that read the files around a package in a subdirectory still find them.
 function old_tests(settings::Settings, release_checkout)
-    directory = mktempdir()
-    head = package_directory(settings)
     release_directory = package_directory(settings, release_checkout)
-    # Without the manifest, which Pkg resolves afresh for the head's dependencies.
-    for entry in readdir(head)
-        entry in (".git", "test") || startswith(entry, "Manifest") || cp(joinpath(head, entry), joinpath(directory, entry))
-    end
     isdir(joinpath(release_directory, "test")) || return true, "the base has no tests"
-    cp(joinpath(release_directory, "test"), joinpath(directory, "test"))
-    # A release from before the tests were a project of the workspace keeps the head's test project, which the head's workspace names.
-    head_test_project = joinpath(head, "test", "Project.toml")
-    test_project = joinpath(directory, "test", "Project.toml")
-    isfile(test_project) || !isfile(head_test_project) || cp(head_test_project, test_project)
-    ok, output, errors = julia_in(directory, `-e "using Pkg; Pkg.test()"`)
-    failing = filter(line -> occursin(r"Test Failed at|Error During Test at|Got exception outside of a @test", line), split(output * errors, '\n'))
-    # A failure without failing tests, such as one of Pkg, is reported by the end of its output.
-    ok || !isempty(failing) || push!(failing, last(errors, 3000))
-    return ok, join(failing, "\n")
+    return with_checkout(settings, "HEAD") do head_checkout
+        directory = package_directory(settings, head_checkout)
+        test_directory = joinpath(directory, "test")
+        # A release from before the tests were a project of the workspace keeps the head's test project, which the head's workspace names.
+        head_test_project = joinpath(test_directory, "Project.toml")
+        head_project = isfile(head_test_project) ? read(head_test_project) : nothing
+        rm(test_directory; recursive = true, force = true)
+        cp(joinpath(release_directory, "test"), test_directory)
+        test_project = joinpath(test_directory, "Project.toml")
+        isfile(test_project) || head_project === nothing || write(test_project, head_project)
+        # Without a committed manifest, which Pkg resolves afresh for the head's dependencies.
+        foreach(entry -> startswith(entry, "Manifest") && rm(joinpath(directory, entry)), readdir(directory))
+        ok, output, errors = julia_in(directory, `-e "using Pkg; Pkg.test()"`)
+        failing = filter(line -> occursin(r"Test Failed at|Error During Test at|Got exception outside of a @test", line), split(output * errors, '\n'))
+        # A failure without failing tests, such as one of Pkg, is reported by the end of its output.
+        ok || !isempty(failing) || push!(failing, last(errors, 3000))
+        return ok, join(failing, "\n")
+    end
 end
 
 # A breaking change takes a breaking version, which a hotfix can't.

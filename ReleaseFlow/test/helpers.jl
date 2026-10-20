@@ -76,6 +76,8 @@ using Test, Toy
 @test double(2) == 4
 @test double(2; scale = 2) == 8
 @test triple(2) == 6
+# The breaking check runs these tests without its own inputs.
+@test !haskey(ENV, "RELEASEFLOW_HEAD_REF")
 """
 
 # A changelog with `unreleased` entries and `released` sections, newest first, each a version and its entries, with comparison links.
