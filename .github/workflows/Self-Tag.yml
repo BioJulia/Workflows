@@ -1,0 +1,26 @@
+# This repository's own caller of the reusable tag.yml, which other repositories call as BioJulia/Workflows/.github/workflows/tag.yml@v1; the Self- files apply this repository's workflows to itself.
+# TagBot tags each release vX.Y.Z once General registers ReleaseFlow; this moves v1, which callers follow, to the newest of them, so callers get a release once it's registered and tagged.
+# workflow_run, schedule and workflow_dispatch run this file from the default branch, develop.
+name: "Self: Tag"
+
+on:
+  push:
+    tags: ['v[0-9]+.[0-9]+.[0-9]+']
+  workflow_run:
+    workflows: [TagBot]
+    types: [completed]
+  schedule:
+    - cron: '17 4 * * *'
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  tag:
+    uses: ./.github/workflows/tag.yml
+    permissions:
+      contents: write
+    secrets:
+      RELEASEFLOW_APP_CLIENT_ID: ${{ secrets.RELEASEFLOW_APP_CLIENT_ID }}
+      RELEASEFLOW_APP_PRIVATE_KEY: ${{ secrets.RELEASEFLOW_APP_PRIVATE_KEY }}
+      RELEASEFLOW_TOKEN: ${{ secrets.RELEASEFLOW_TOKEN }}

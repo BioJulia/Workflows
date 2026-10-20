@@ -4,7 +4,7 @@ Reusable GitHub Actions workflows for Julia packages: checks that a pull request
 
 The repository holds two things:
 - **the workflows**, in [`.github/workflows/`](.github/workflows), with the composite action, [`action.yml`](action.yml), that they call, tagged `vX.Y.Z`;
-- **the checks**, a Julia package, [ReleaseFlow](ReleaseFlow), registered in General from this repository's `ReleaseFlow/` directory, and tagged `ReleaseFlow-vX.Y.Z`.
+- **the checks**, a Julia package, [ReleaseFlow](ReleaseFlow), registered in General from this repository's `ReleaseFlow/` directory, whose version, and tag, the workflows share.
 
 Both share one version, in `ReleaseFlow/Project.toml`, and one changelog, [`ReleaseFlow/CHANGELOG.md`](ReleaseFlow/CHANGELOG.md).
 
@@ -77,6 +77,38 @@ jobs:
       contents: read
 ```
 
+And, for a repository that callers follow by its major tag, such as one of GitHub Actions or reusable workflows, the tag workflow, in `.github/workflows/Tag.yml`, which moves each major tag, such as `v1`, to the newest release of its major version, `vX.Y.Z`:
+
+```yaml
+name: Tag
+on:
+  push:
+    tags: ['v[0-9]+.[0-9]+.[0-9]+']   # version tags pushed by hand, or by TagBot with an SSH key
+  workflow_run:
+    workflows: [TagBot]               # TagBot's tags, made with GITHUB_TOKEN, start no workflow
+    types: [completed]
+  schedule:
+    - cron: '17 4 * * *'              # a daily fallback
+  workflow_dispatch:
+permissions: {}
+jobs:
+  tag:
+    uses: BioJulia/Workflows/.github/workflows/tag.yml@v1
+    permissions:
+      contents: write
+    secrets:
+      RELEASEFLOW_APP_CLIENT_ID: ${{ secrets.RELEASEFLOW_APP_CLIENT_ID }}
+      RELEASEFLOW_APP_PRIVATE_KEY: ${{ secrets.RELEASEFLOW_APP_PRIVATE_KEY }}
+      RELEASEFLOW_TOKEN: ${{ secrets.RELEASEFLOW_TOKEN }}
+```
+
+It works alongside [TagBot](https://github.com/JuliaRegistries/TagBot), which tags each release `vX.Y.Z` once the registry records it, at the commit that the registry records, with its GitHub release, but never moves a major tag; for a package in a subdirectory, TagBot's `tag_prefix: NO_PREFIX` makes its tags `vX.Y.Z` rather than `<Package>-vX.Y.Z`.
+The tag workflow follows whatever version tags exist, whenever they appear, including those that a maintainer pushes by hand: a major tag moves only to its major version's newest release, by version, so an older version's tag doesn't move it, pre-releases such as `v2.0.0-rc1` are left out, and a rerun changes nothing.
+So callers of the major tag get a release once it's registered and tagged, and never a release whose tag doesn't exist yet.
+
+It moves the tags with the ReleaseFlow app's token, or else `RELEASEFLOW_TOKEN`, or else the job's own token; a ruleset on `v*` tags must let that token through, such as with the app on its bypass list.
+Its triggers run on the default branch or on a tag, not on the main branch, so the `releaseflow` environment must allow them, as described in [The ReleaseFlow environment](#the-releaseflow-environment), or the caller passes `with: { environment: '' }` to run the job without an environment, with the job's own token.
+
 A package can follow the major tag, `v1`, or pin a release, such as `v1.0.0`; Dependabot's `github-actions` updates keep a pinned release current.
 
 ### Inputs
@@ -121,6 +153,7 @@ An environment's secrets reach only the jobs on the branches that the environmen
 
 1. Open the repository's Settings → Environments, and choose "New environment", named `releaseflow`.
 2. Under "Deployment branches and tags", choose "Selected branches and tags", and add a rule for the main branch only, such as `master`.
+   For the tag workflow, add rules for the repository's default branch, such as `develop`, and for tags matching `v*`, whose ruleset limits who can make them.
 3. Under "Environment secrets", add the back-merge's secrets: `RELEASEFLOW_APP_CLIENT_ID` and `RELEASEFLOW_APP_PRIVATE_KEY` for an app, or `RELEASEFLOW_TOKEN` for a personal access token.
 
 GitHub uses the environment's secrets in place of secrets of the same name that the caller passes, so the caller needs no change.
@@ -143,6 +176,7 @@ One app serves every repository of the organization that uses the back-merge wor
    - Workflows: Read and write, for the branch's workflow files.
 
    Add those two only if a back-merge's log shows that refusal.
+   For the tag workflow, the app needs Contents: Read and write, to move the major tags.
 
    Metadata: Read-only is added by itself; leave every other permission at no access.
 5. Under "Where can this GitHub App be installed?", choose "Only on this account", and choose "Create GitHub App".
@@ -236,14 +270,14 @@ A release or hotfix branch:
 3. moves the changelog's unreleased entries into a `## [X.Y.Z]` section, with its comparison link.
 
 Once it merges into `master`:
-1. tag the merge commit `vX.Y.Z`, and move the major tag to it, with `git tag -f v1 vX.Y.Z` and `git push -f origin v1`;
-2. comment `@JuliaRegistrator register subdir=ReleaseFlow` on the commit, which registers ReleaseFlow in General from its subdirectory;
-3. once General merges the registration, TagBot tags the commit `ReleaseFlow-vX.Y.Z`.
+1. comment `@JuliaRegistrator register subdir=ReleaseFlow` on the commit, which registers ReleaseFlow in General from its subdirectory;
+2. once General merges the registration, TagBot tags the commit `vX.Y.Z`, with its GitHub release, which the workflows' calls of the action name;
+3. the Tag workflow, [`Self-Tag.yml`](.github/workflows/Self-Tag.yml), then moves the major tag, `v1`, to it, so callers get the release once it's registered and tagged.
 
 A breaking change to a workflow's inputs, jobs or check names, or to ReleaseFlow's public API, takes a new major version, and a new major tag, such as `v2`.
 
 Every package that calls the workflows runs what their tags point to, so:
-- a ruleset on tags matching `v*` restricts who can create, move or delete them to the maintainers;
+- a ruleset on tags matching `v*` restricts who can create, move or delete them to the maintainers and the ReleaseFlow app, on its bypass list, with whose token TagBot tags releases and the Tag workflow moves the major tag;
 - the workflows and the action pin the actions of other owners to commits, with their versions in comments, which Dependabot updates by pull request, labelled `skip changelog`;
 - `.github/CODEOWNERS` requires a maintainer's review of any change to the workflows or the action.
 

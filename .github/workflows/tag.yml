@@ -1,0 +1,101 @@
+# Tag: move each major tag, such as v1, to the newest release of its major version, vX.Y.Z, for a repository that callers follow by its major tag, such as one of GitHub Actions or reusable workflows; BioJulia/Workflows moves its own with it.
+# It moves major tags only: TagBot tags each release vX.Y.Z, at the commit that the registry records, once the registry merges it, with `tag_prefix: NO_PREFIX` for a package in a subdirectory; a maintainer may also push a version tag by hand.
+# So a major tag only ever follows a version tag that exists, and the job does the same whenever it runs: a major tag already at its newest release stays, a version tag older than the newest doesn't move it, and pre-releases, such as v2.0.0-rc1, are left out.
+# Called from the repository's own workflow, on whatever makes version tags:
+#
+#   on:
+#     push:
+#       tags: ['v[0-9]+.[0-9]+.[0-9]+']   # version tags pushed by hand, or by TagBot with an SSH key
+#     workflow_run:
+#       workflows: [TagBot]               # TagBot's tags, made with GITHUB_TOKEN, start no workflow
+#       types: [completed]
+#     schedule:
+#       - cron: '17 4 * * *'              # a daily fallback
+#     workflow_dispatch:
+#   permissions: {}
+#   jobs:
+#     tag:
+#       uses: BioJulia/Workflows/.github/workflows/tag.yml@v1
+#       permissions:
+#         contents: write
+#       secrets:
+#         RELEASEFLOW_APP_CLIENT_ID: ${{ secrets.RELEASEFLOW_APP_CLIENT_ID }}
+#         RELEASEFLOW_APP_PRIVATE_KEY: ${{ secrets.RELEASEFLOW_APP_PRIVATE_KEY }}
+#         RELEASEFLOW_TOKEN: ${{ secrets.RELEASEFLOW_TOKEN }}
+#
+# Moving a major tag doesn't match the version tags' filter, so it doesn't start the workflow again.
+# The tags are moved with the ReleaseFlow app's token, or else RELEASEFLOW_TOKEN, or else the job's own token, which a ruleset on `v*` tags must let through; the app can be on the ruleset's bypass list.
+# The job runs in the deployment environment `environment`, `releaseflow` unless given, which keeps those secrets; these triggers run on the default branch or on a tag, so the environment must allow them, or `environment: ''` runs the job without one.
+name: "Reusable: Tag"
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        description: The deployment environment that holds the secrets, or empty for none.
+        type: string
+        default: releaseflow
+    secrets:
+      RELEASEFLOW_APP_CLIENT_ID:
+        description: The client ID of the ReleaseFlow app, which moves the major tags.
+        required: false
+      RELEASEFLOW_APP_PRIVATE_KEY:
+        description: A private key of the ReleaseFlow app.
+        required: false
+      RELEASEFLOW_TOKEN:
+        description: A personal access token, where there's no ReleaseFlow app.
+        required: false
+
+permissions: {}
+
+jobs:
+  tag:
+    name: Tag
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    permissions:
+      contents: write
+    steps:
+      # Secrets can't be tested in a step's condition, so this step tells whether a GitHub App is given.
+      - id: app-given
+        env:
+          CLIENT_ID: ${{ secrets.RELEASEFLOW_APP_CLIENT_ID }}
+        run: echo "given=$([ -n "$CLIENT_ID" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+      - id: app
+        if: steps.app-given.outputs.given == 'true'
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          client-id: ${{ secrets.RELEASEFLOW_APP_CLIENT_ID }}
+          private-key: ${{ secrets.RELEASEFLOW_APP_PRIVATE_KEY }}
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+          persist-credentials: false
+      - name: Move the major tags
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token || secrets.RELEASEFLOW_TOKEN || github.token }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          # The version tags, vX.Y.Z only, oldest first.
+          versions=$(git tag --list 'v*' | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V || true)
+          if [ -z "$versions" ]; then
+            echo "There's no version tag vX.Y.Z, so there's no major tag to move."
+            exit 0
+          fi
+          for major in $(echo "$versions" | sed -E 's/^(v[0-9]+)\..*$/\1/' | sort -u); do
+            newest=$(echo "$versions" | grep -E "^$major\." | tail -n 1)
+            # The commit of a tag, also of an annotated one.
+            target=$(git rev-parse "$newest^{commit}")
+            current=$(git rev-parse --verify --quiet "refs/tags/$major^{commit}" || true)
+            if [ "$current" = "$target" ]; then
+              echo "$major is at $newest, $target, already."
+            elif [ -n "$current" ]; then
+              gh api --method PATCH "repos/$REPOSITORY/git/refs/tags/$major" -f sha="$target" -F force=true > /dev/null
+              echo "Moved $major to $newest, $target."
+            else
+              gh api "repos/$REPOSITORY/git/refs" -f ref="refs/tags/$major" -f sha="$target" > /dev/null
+              echo "Tagged $newest's commit, $target, $major."
+            fi
+          done
