@@ -50,7 +50,8 @@ permissions: {}
 
 jobs:
   tag:
-    name: Tag
+    # Shown under the caller's job, such as `tag / Major tags`.
+    name: Major tags
     runs-on: ubuntu-latest
     environment: ${{ inputs.environment }}
     permissions:
@@ -78,24 +79,32 @@ jobs:
           REPOSITORY: ${{ github.repository }}
         run: |
           set -euo pipefail
+          # Each outcome is a notice on the run, and a line of the job's summary.
+          summary="${GITHUB_STEP_SUMMARY:-/dev/null}"
+          echo "## Major tags" >> "$summary"
+          report() {
+            echo "::notice title=Tag::$1"
+            echo "- $1" >> "$summary"
+          }
           # The version tags, vX.Y.Z only, oldest first.
           versions=$(git tag --list 'v*' | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V || true)
           if [ -z "$versions" ]; then
-            echo "There's no version tag vX.Y.Z, so there's no major tag to move."
+            report "There's no version tag vX.Y.Z, so there's no major tag to move."
             exit 0
           fi
           for major in $(echo "$versions" | sed -E 's/^(v[0-9]+)\..*$/\1/' | sort -u); do
             newest=$(echo "$versions" | grep -E "^$major\." | tail -n 1)
             # The commit of a tag, also of an annotated one.
             target=$(git rev-parse "$newest^{commit}")
+            short=$(git rev-parse --short "$target")
             current=$(git rev-parse --verify --quiet "refs/tags/$major^{commit}" || true)
             if [ "$current" = "$target" ]; then
-              echo "$major is at $newest, $target, already."
+              report "$major is at $newest, $short, already."
             elif [ -n "$current" ]; then
               gh api --method PATCH "repos/$REPOSITORY/git/refs/tags/$major" -f sha="$target" -F force=true > /dev/null
-              echo "Moved $major to $newest, $target."
+              report "Moved $major to $newest, $short."
             else
               gh api "repos/$REPOSITORY/git/refs" -f ref="refs/tags/$major" -f sha="$target" > /dev/null
-              echo "Tagged $newest's commit, $target, $major."
+              report "Made $major at $newest, $short."
             fi
           done
