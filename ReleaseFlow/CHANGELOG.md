@@ -6,6 +6,11 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Added
+
+- The reusable workflow `tag.yml`, which moves each major tag, such as `v1`, to the newest release of its major version, `vX.Y.Z`, whichever made the tag, TagBot or a maintainer, and whenever, for a repository that callers follow by its major tag; it never moves a major tag backwards, and leaves pre-releases out.
+- This repository moves `v1` with it, through `Self-Tag.yml`, once TagBot tags a release `vX.Y.Z`, with `tag_prefix: NO_PREFIX`, in place of `ReleaseFlow-vX.Y.Z`, and with the ReleaseFlow app's token, which the ruleset on `v*` tags lets through; so the workflows' callers get a release once ReleaseFlow's is registered.
+
 ## [1.0.1] - 2026-10-20
 
 - The breaking check counts a name that still resolves as provided, such as an old name kept with `Base.@deprecate_binding`, which Julia's `names` leaves out; a rename through a deprecated binding is no longer reported as a removal.

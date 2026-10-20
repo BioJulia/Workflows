@@ -143,3 +143,17 @@ end
 
 passes(result) = result.code == 0
 fails(result, message) = result.code == 1 && occursin(message, result.output)
+
+# The shell of the step `name` of the workflow `file`: the block after its `run: |`, without its indentation.
+function workflow_step(file, name)
+    lines = readlines(normpath(joinpath(@__DIR__, "..", "..", ".github", "workflows", file)))
+    named = findfirst(line -> strip(line) == "- name: $(name)", lines)
+    start = findnext(line -> endswith(line, "run: |"), lines, named)
+    indentation = length(match(r"^ *", lines[start + 1]).match)
+    block = String[]
+    for line in lines[(start + 1):end]
+        !isempty(strip(line)) && length(match(r"^ *", line).match) < indentation && break
+        push!(block, isempty(strip(line)) ? "" : line[(indentation + 1):end])
+    end
+    return join(block, '\n') * '\n'
+end
