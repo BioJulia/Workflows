@@ -3,10 +3,12 @@
 
 # The package in `lib/Toy`: its files there, and a README at the repository's root.
 in_lib(files::Pair...) = ("lib/Toy/$(path)" => contents for (path, contents) in files)
+# Its tests read the README, around the package, which the breaking check's run of the released tests still finds.
+const LIB_TESTS = TESTS * "@test isfile(joinpath(@__DIR__, \"..\", \"..\", \"..\", \"README.md\"))\n"
 
 @testset "Subdirectory" begin
     directory = repository(; branch = "main")
-    released = commit!(directory, "Release 0.1.0", "README.md" => "Toy.", in_lib("Project.toml" => project("0.1.0"), "src/Toy.jl" => SOURCE, "test/runtests.jl" => TESTS, "CHANGELOG.md" => changelog(released = ["0.1.0" => ["First."]]))...)
+    released = commit!(directory, "Release 0.1.0", "README.md" => "Toy.", in_lib("Project.toml" => project("0.1.0"), "src/Toy.jl" => SOURCE, "test/runtests.jl" => LIB_TESTS, "CHANGELOG.md" => changelog(released = ["0.1.0" => ["First."]]))...)
     git(directory, "tag", "v0.1.0")
     feature = commit!(directory, "Feature", in_lib("feature.txt" => "feature", "CHANGELOG.md" => changelog(unreleased = ["A feature."], released = ["0.1.0" => ["First."]]))...)
     origin!(directory, "main", feature)
