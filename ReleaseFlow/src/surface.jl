@@ -26,28 +26,36 @@ function listing!(lines, mod, prefix)
     for name in sort(names(mod))
         (name === nameof(mod) || !isdefined(mod, name)) && continue
         value = getfield(mod, name)
-        label = "$(prefix).$(name)"
-        if value isa Module
-            parentmodule(value) === mod && value !== mod && (push!(lines, "module\t$(label)"); listing!(lines, value, label))
-        elseif value isa Function
-            push!(lines, "function\t$(label)")
-            for method in methods(value)
-                owned(method) || continue
-                push!(lines, "method\t$(label)\t$(signature(method))")
-                for keyword in Base.kwarg_decl(method)
-                    push!(lines, "keyword\t$(label)\t$(signature(method))\t$(keyword)")
-                end
+        # A submodule is listed where it's defined, not where it's imported.
+        value isa Module && (parentmodule(value) !== mod || value === mod) && continue
+        entries!(lines, "$(prefix).$(name)", value)
+    end
+    return lines
+end
+
+# The entries of a public binding, `label`, whose value is `value`.
+function entries!(lines, label, value)
+    if value isa Module
+        push!(lines, "module\t$(label)")
+        listing!(lines, value, label)
+    elseif value isa Function
+        push!(lines, "function\t$(label)")
+        for method in methods(value)
+            owned(method) || continue
+            push!(lines, "method\t$(label)\t$(signature(method))")
+            for keyword in Base.kwarg_decl(method)
+                push!(lines, "keyword\t$(label)\t$(signature(method))\t$(keyword)")
             end
-        elseif value isa Type
-            type = Base.unwrap_unionall(value)
-            push!(lines, "type\t$(label)")
-            type isa DataType || continue
-            push!(lines, "supertype\t$(label)\t$(supertype(type))")
-            push!(lines, "parameters\t$(label)\t$(length(type.parameters))")
-            isabstracttype(type) || foreach(field -> push!(lines, "field\t$(label)\t$(field)"), fieldnames(type))
-        else
-            push!(lines, "constant\t$(label)")
         end
+    elseif value isa Type
+        type = Base.unwrap_unionall(value)
+        push!(lines, "type\t$(label)")
+        type isa DataType || return lines
+        push!(lines, "supertype\t$(label)\t$(supertype(type))")
+        push!(lines, "parameters\t$(label)\t$(length(type.parameters))")
+        isabstracttype(type) || foreach(field -> push!(lines, "field\t$(label)\t$(field)"), fieldnames(type))
+    else
+        push!(lines, "constant\t$(label)")
     end
     return lines
 end
@@ -76,8 +84,20 @@ function provided(label, text, keyword = nothing)
     return hasmethod(f, types, (name,))
 end
 
+# The entries of `label` as it resolves now, or none where it no longer resolves.
+# `names` leaves out a deprecated binding, such as one of `Base.@deprecate_binding`, which still provides the old name.
+function resolved_entries(label)
+    value = try
+        resolve(label)
+    catch
+        return Set{String}()
+    end
+    return Set(entries!(String[], label, value))
+end
+
 function missing_entries(lines)
     current = Set(listing!(String[], PACKAGE, string(NAME)))
+    resolved = Dict{String, Set{String}}()
     removed = String[]
     for line in lines
         line in current && continue
@@ -88,7 +108,7 @@ function missing_entries(lines)
         elseif kind == "keyword"
             provided(fields[2], fields[3], fields[4]) || push!(removed, line)
         else
-            push!(removed, line)
+            line in get!(() -> resolved_entries(fields[2]), resolved, fields[2]) || push!(removed, line)
         end
     end
     return removed

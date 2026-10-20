@@ -1,7 +1,7 @@
-# This repository's own caller of the reusable gitflow.yml, which other repositories call as BioJulia/Workflows/.github/workflows/gitflow.yml@v1; the Self- files apply this repository's workflows to itself.
-# This repository follows gitflow, with master and develop, and checks its own pull requests with its reusable gitflow workflow.
+# This repository's own caller of the reusable gitflow.yml, as other repositories call it; the Self- files apply this repository's workflows to itself.
+# This repository follows gitflow, with master and develop, and checks its own pull requests with its released gitflow workflow.
 # Its version and changelog are ReleaseFlow's, in ReleaseFlow/.
-# The reusable workflow calls the action at the last release, so a pull request is checked by the released checks; CI tests the pull request's own.
+# It calls the workflow at the major tag, not the pull request's own, whose calls of the action a release sets to its tag before the tag exists; so a pull request is checked by the released checks, and CI tests the pull request's own.
 name: "Self: Gitflow"
 
 on:
@@ -16,7 +16,7 @@ permissions: {}
 
 jobs:
   gitflow:
-    uses: ./.github/workflows/gitflow.yml
+    uses: BioJulia/Workflows/.github/workflows/gitflow.yml@v1
     permissions:
       contents: read
     with:
