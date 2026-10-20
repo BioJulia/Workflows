@@ -12,6 +12,8 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - This repository moves `v1` with it, through `Self-Tag.yml`, once TagBot tags a release `vX.Y.Z`, with `tag_prefix: NO_PREFIX`, in place of `ReleaseFlow-vX.Y.Z`, and with the ReleaseFlow app's token, which the ruleset on `v*` tags lets through; so the workflows' callers get a release once ReleaseFlow's is registered.
 - The reusable workflow `dependents.yml`, which runs the tests of the packages that depend on this one, each checked out at its default branch, with the pull request's branch in its place, as the checks `dependents / <repository>`.
 - The back-merge's inputs `from` and `into`, which bring any branch into any other, such as a maintenance branch into the main branch, from a branch `back-merge/<from>-<commit>`; by default, the main branch into develop, as before.
+- `prepare`, which prepares a release in a checkout of the branch it starts from: the next version after the last release, by `RELEASEFLOW_STEP`, where `auto` reads the unreleased section's `### Breaking` and `### Added`, set in `Project.toml`; the unreleased entries moved into its dated section, with the changelog's links; and the pins of `RELEASEFLOW_PIN_ACTION` set to it.
+- The reusable workflow `release.yml`, started from the Actions tab, which prepares a release or hotfix with `prepare`, pushes its branch, and opens its pull request, a draft for a hotfix, with the ReleaseFlow app's token; and `Self-Release.yml`, which prepares this repository's releases.
 
 ## [1.0.1] - 2026-10-20
 

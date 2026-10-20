@@ -30,7 +30,7 @@
 # The pull request comes from a branch at the commit that it brings: back-merge/vX.Y.Z from the main branch, named after its release, and back-merge/<from>-<commit> from any other, so that a conflict is resolved on that branch, by merging the branch that it goes into into it, without pushing to either.
 # Pull requests opened with the default GITHUB_TOKEN don't start workflows, so their required checks would never report.
 # Another token avoids that, with read and write access to pull requests, while the job's own token creates the branch; where GitHub refuses the job's token that branch, because its workflow files differ, the other token creates it, and then needs read and write access to contents and workflows too:
-# - a GitHub App's, created for each run from the secrets RELEASEFLOW_APP_CLIENT_ID and RELEASEFLOW_APP_PRIVATE_KEY, which opens the pull request as the app's bot;
+# - the ReleaseFlow app's, created for each run from the secrets RELEASEFLOW_APP_CLIENT_ID and RELEASEFLOW_APP_PRIVATE_KEY, which opens the pull request as the app's bot;
 # - or the secret RELEASEFLOW_TOKEN, a fine-grained personal access token, which opens it as the token's owner.
 # Without either, the default token opens the pull request, which says to close and reopen it, so that the checks run.
 # Either way, the repository must allow GitHub Actions to create pull requests, in Settings → Actions → General.
