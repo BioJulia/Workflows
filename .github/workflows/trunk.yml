@@ -59,7 +59,7 @@ jobs:
         with:
           fetch-depth: 0
       - id: release
-        uses: BioJulia/Workflows@v1.0.0
+        uses: BioJulia/Workflows@v1.0.1
         with:
           check: is-release
           model: trunk
@@ -77,7 +77,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
-      - uses: BioJulia/Workflows@v1.0.0
+      - uses: BioJulia/Workflows@v1.0.1
         with:
           check: version
           model: trunk
@@ -96,7 +96,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
-      - uses: BioJulia/Workflows@v1.0.0
+      - uses: BioJulia/Workflows@v1.0.1
         with:
           check: changelog
           model: trunk
@@ -120,7 +120,7 @@ jobs:
         with:
           version: '1'
       - uses: julia-actions/cache@9353db09a0f2bbbdec6f41791918c75d37391b36 # v3.5.0
-      - uses: BioJulia/Workflows@v1.0.0
+      - uses: BioJulia/Workflows@v1.0.1
         with:
           check: breaking
           model: trunk
@@ -139,7 +139,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
-      - uses: BioJulia/Workflows@v1.0.0
+      - uses: BioJulia/Workflows@v1.0.1
         with:
           check: entry
           model: trunk
