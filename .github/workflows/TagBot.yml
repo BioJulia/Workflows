@@ -34,5 +34,8 @@ jobs:
           # The app's token, whose tags also start Self-Tag.yml by their push; GITHUB_TOKEN otherwise, whose tags Self-Tag.yml follows when TagBot's run completes.
           token: ${{ steps.app.outputs.token || secrets.GITHUB_TOKEN }}
           subdir: ReleaseFlow
+          # The release branch, whose commits TagBot is to tag: the back-merge into develop shares a release's tree, and without the branch TagBot may pick it.
+          # TagBot reads this first once it searches the release branch's history first, which its README documents, and only sets the release's target until then.
+          branch: master
           # vX.Y.Z, at which the workflows call the action, rather than ReleaseFlow-vX.Y.Z, as for a package in a subdirectory.
           tag_prefix: NO_PREFIX

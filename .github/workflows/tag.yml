@@ -79,12 +79,29 @@ jobs:
           REPOSITORY: ${{ github.repository }}
         run: |
           set -euo pipefail
-          # Each outcome is a notice on the run, and a line of the job's summary.
+          # Each outcome is a notice on the run, and a line of the job's summary; a failure is an error, and fails the step once every major tag is handled.
           summary="${GITHUB_STEP_SUMMARY:-/dev/null}"
           echo "## Major tags" >> "$summary"
           report() {
             echo "::notice title=Tag::$1"
             echo "- $1" >> "$summary"
+          }
+          failed=false
+          fail() {
+            echo "::error title=Tag::$1"
+            echo "- $1" >> "$summary"
+            failed=true
+          }
+          # Run `gh`, and report its own message where it fails.
+          call() {
+            local what="$1"
+            shift
+            local message
+            if message=$(gh "$@" 2>&1 > /dev/null); then
+              return 0
+            fi
+            fail "Couldn't $what: ${message//$'\n'/ }"
+            return 1
           }
           # The version tags, vX.Y.Z only, oldest first.
           versions=$(git tag --list 'v*' | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V || true)
@@ -100,11 +117,15 @@ jobs:
             current=$(git rev-parse --verify --quiet "refs/tags/$major^{commit}" || true)
             if [ "$current" = "$target" ]; then
               report "$major is at $newest, $short, already."
+            elif [ -n "$current" ] && ! git merge-base --is-ancestor "$current" "$target"; then
+              # A major tag only moves forwards: a newest release that isn't descended from it, such as once a newer version's tag is deleted, leaves it where it is.
+              report "$major is at $(git rev-parse --short "$current"), which $newest, $short, doesn't descend from, so it stays."
             elif [ -n "$current" ]; then
-              gh api --method PATCH "repos/$REPOSITORY/git/refs/tags/$major" -f sha="$target" -F force=true > /dev/null
-              report "Moved $major to $newest, $short."
+              call "move $major to $newest, $short" api --method PATCH "repos/$REPOSITORY/git/refs/tags/$major" -f sha="$target" -F force=true && report "Moved $major to $newest, $short."
             else
-              gh api "repos/$REPOSITORY/git/refs" -f ref="refs/tags/$major" -f sha="$target" > /dev/null
-              report "Made $major at $newest, $short."
+              call "make $major at $newest, $short" api "repos/$REPOSITORY/git/refs" -f ref="refs/tags/$major" -f sha="$target" && report "Made $major at $newest, $short."
             fi
           done
+          if [ "$failed" = true ]; then
+            exit 1
+          fi

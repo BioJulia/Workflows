@@ -1,11 +1,11 @@
 # Moving the major tags
 # ---------------------
 
-# The tag workflow's step, run in a repository with version tags, with a stand-in for `gh` that logs its calls.
+# The tag workflow's step, run in a repository with version tags, with a stand-in for `gh` that logs its calls, and refuses them with `GH_REFUSE`'s message where that's set.
 @testset "Tag" begin
     directory = mktempdir()
     bin = mkpath(joinpath(directory, "bin"))
-    write(joinpath(bin, "gh"), "#!/bin/bash\necho \"gh \$*\" >> \"\$LOG\"\n")
+    write(joinpath(bin, "gh"), "#!/bin/bash\necho \"gh \$*\" >> \"\$LOG\"\nif [ -n \"\$GH_REFUSE\" ]; then echo \"\$GH_REFUSE\" >&2; exit 1; fi\n")
     chmod(joinpath(bin, "gh"), 0o755)
     log = joinpath(directory, "log")
     script = joinpath(directory, "step.sh")
@@ -14,10 +14,10 @@
     git(work, "config", "tag.gpgsign", "false")
     commits = [commit!(work, "Commit $(i)", "file.txt" => string(i)) for i in 1:6]
     summary = joinpath(directory, "summary.md")
-    function step()
+    function step(; refuse = "")
         write(log, "")
         write(summary, "")
-        environment = Dict("PATH" => "$(bin):$(ENV["PATH"])", "LOG" => log, "REPOSITORY" => "Example/Toy.jl", "GITHUB_STEP_SUMMARY" => summary)
+        environment = Dict("PATH" => "$(bin):$(ENV["PATH"])", "LOG" => log, "REPOSITORY" => "Example/Toy.jl", "GITHUB_STEP_SUMMARY" => summary, "GH_REFUSE" => refuse)
         output = IOBuffer()
         process = run(pipeline(Cmd(addenv(`bash $(script)`, environment); dir = work, ignorestatus = true); stdout = output, stderr = output))
         return (code = process.exitcode, output = String(take!(output)), log = read(log, String), summary = read(summary, String))
@@ -65,4 +65,19 @@
     # An annotated tag counts at its commit.
     git(work, "tag", "-a", "v2.2.0", "-m", "Release 2.2.0", commits[6])
     @test step().log == moved("v2", commits[6]) * "\n"
+    # A major tag only moves forwards: once the newest version's tag is deleted, the newest left is behind the major tag, which stays.
+    tag!("v2", commits[6])
+    git(work, "tag", "-d", "v2.2.0")
+    result = step()
+    @test result.code == 0 && !occursin("v2", result.log)
+    @test occursin("::notice title=Tag::v2 is at $(short(commits[6])), which v2.0.0, $(short(commits[5])), doesn't descend from, so it stays.", result.output)
+    # A refused move is an error with GitHub's message, the other major tags are still handled, and the step fails.
+    tag!("v1", commits[1])
+    tag!("v2", commits[1])
+    result = step(refuse = "HTTP 403: Resource not accessible by integration\nsecond line")
+    @test result.code == 1
+    @test occursin(moved("v1", commits[3]), result.log) && occursin(moved("v2", commits[5]), result.log)
+    @test occursin("::error title=Tag::Couldn't move v1 to v1.10.0, $(short(commits[3])): HTTP 403: Resource not accessible by integration second line", result.output)
+    @test occursin("- Couldn't move v2 to v2.0.0, $(short(commits[5])): HTTP 403", result.summary)
+    @test !occursin("Moved", result.summary)
 end
