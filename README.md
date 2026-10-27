@@ -183,6 +183,7 @@ jobs:
 
 It works alongside [TagBot](https://github.com/JuliaRegistries/TagBot), which tags each release `vX.Y.Z` once the registry records it, at the commit that the registry records, with its GitHub release, but never moves a major tag; for a package in a subdirectory, TagBot's `tag_prefix: NO_PREFIX` makes its tags `vX.Y.Z` rather than `<Package>-vX.Y.Z`.
 The tag workflow follows whatever version tags exist, whenever they appear, including those that a maintainer pushes by hand: a major tag moves only to its major version's newest release, by version, so an older version's tag doesn't move it, pre-releases such as `v2.0.0-rc1` are left out, and a rerun changes nothing.
+It only moves a major tag forwards, to a release that descends from where the tag is, so deleting a version's tag doesn't take the major tag back to an older release; and where GitHub refuses a move, it reports GitHub's message as an error, and fails once every major tag is handled.
 So callers of the major tag get a release once it's registered and tagged, and never a release whose tag doesn't exist yet.
 For each major tag, it reports what it did, made it, moved it or left it, as a notice on the run and a line of the job's summary, under the job `<caller's job> / Major tags`.
 
