@@ -66,3 +66,19 @@ end
         @test step_inputs(file, id) == step_inputs(file, "$(id)-local")
     end
 end
+
+# A composite action passes on only the outputs that it declares, so every output that ReleaseFlow writes is declared in action.yml.
+@testset "Action outputs" begin
+    root = normpath(joinpath(@__DIR__, "..", ".."))
+    written = Set{String}()
+    for (directory, _, files) in walkdir(joinpath(root, "ReleaseFlow", "src")), file in files
+        for m in eachmatch(r"output\(settings, \"([a-z-]+)\"", read(joinpath(directory, file), String))
+            push!(written, m.captures[1])
+        end
+    end
+    lines = readlines(joinpath(root, "action.yml"))
+    start = findfirst(==("outputs:"), lines)
+    declared = Set(m.captures[1] for m in filter(!isnothing, match.(r"^  ([a-z-]+):$", lines[(start + 1):findnext(==("runs:"), lines, start)])))
+    @test !isempty(written)
+    @test written ⊆ declared
+end
