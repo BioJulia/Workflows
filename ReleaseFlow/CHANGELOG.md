@@ -17,6 +17,7 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - The reusable workflow `register.yml`, which comments `@JuliaRegistrator register`, with the release notes, on a release's commit once it merges, with a machine user's token, `REGISTRATOR_TOKEN`; TagBot then tags the release; and `Self-Register.yml`, which registers this repository's releases.
 - `prepare`, which prepares a release in a checkout of the branch it starts from: the next version after the last release, by `RELEASEFLOW_STEP`, where `auto` reads the unreleased section's `### Breaking` and `### Added`, set in `Project.toml`; the unreleased entries moved into its dated section, with the changelog's links; and the pins of `RELEASEFLOW_PIN_ACTION` set to it.
 - The reusable workflow `release.yml`, started from the Actions tab, which prepares a release or hotfix with `prepare`, pushes its branch, and opens its pull request, a draft for a hotfix, with the ReleaseFlow app's token; and `Self-Release.yml`, which prepares this repository's releases.
+- The input `local-action` of `release.yml` and `register.yml`, which runs the action from the checked-out commit instead of its release; `Self-Release.yml` and `Self-Register.yml` set it, since a release of this repository may be the first with a check that they call, and its own tag only exists once it's registered.
 
 ## [1.0.1] - 2026-10-20
 

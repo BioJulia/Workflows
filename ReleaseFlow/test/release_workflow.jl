@@ -58,3 +58,11 @@
     @test pushed("hotfix/v0.1.2") == "github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com> Hotfix 0.1.2"
     @test endswith(rstrip(read(log, String)), "--draft=true")
 end
+
+# The action at its release, or, with `local-action`, at the checked-out commit, as this repository's own releases run it; both steps take the same inputs.
+@testset "Local action" begin
+    for (file, id) in ["release.yml" => "prepare", "register.yml" => "registration"]
+        @test !isempty(step_inputs(file, id))
+        @test step_inputs(file, id) == step_inputs(file, "$(id)-local")
+    end
+end
