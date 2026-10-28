@@ -380,7 +380,7 @@ A breaking change to a workflow's inputs, jobs or check names, or to ReleaseFlow
 Every package that calls the workflows runs what their tags point to, so:
 - a ruleset on tags matching `v*` restricts who can create, move or delete them to the maintainers and the ReleaseFlow app, on its bypass list, with whose token TagBot tags releases and the Tag workflow moves the major tag;
 - the workflows and the action pin the actions of other owners to commits, with their versions in comments, which Dependabot updates by pull request, labelled `skip changelog`;
-- `.github/CODEOWNERS` requires a maintainer's review of any change to the workflows or the action.
+- `.github/CODEOWNERS` requires a maintainer's review of any change to the workflows, the action, or ReleaseFlow, which the action runs.
 
 The repository's own pull requests are checked by the released checks, since `Self-Gitflow.yml` calls `gitflow.yml` at the major tag, `v1`, while CI tests the pull request's own.
 A release's pull request sets the workflows' calls of the action to its own tag, which only exists once it merges, so its checks are those of the release before it.
