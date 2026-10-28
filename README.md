@@ -140,6 +140,28 @@ On a new branch, `release/vX.Y.Z` or `hotfix/vX.Y.Z`, it sets the version in `Pr
 The step `auto` reads the unreleased section: a `### Breaking` subsection takes a breaking version, the next major version, or below 1.0 the next minor; `### Added` takes the next minor version; anything else, the next patch.
 A hotfix is always the next patch, and its section waits for the fix's entry, so its pull request is a draft until the fix is pushed.
 
+And the registration, in `.github/workflows/Register.yml`, which comments `@JuliaRegistrator register` on a release's commit once it merges into the main branch, with its section of the changelog as the release notes:
+
+```yaml
+name: Register
+on:
+  push:
+    branches: [main]   # under OneFlow, workflow_dispatch, run on the release branch
+  workflow_dispatch:
+permissions: {}
+jobs:
+  register:
+    uses: BioJulia/Workflows/.github/workflows/register.yml@v1
+    permissions:
+      contents: read
+    secrets:
+      REGISTRATOR_TOKEN: ${{ secrets.REGISTRATOR_TOKEN }}
+```
+
+A commit whose version the registry already records has nothing to register, so a push that releases nothing does nothing.
+A package's first release is registered by hand, since the registry reviews a new package before it merges: where the registry doesn't know the package, the workflow doesn't comment, and its warning and job summary give the comment to make, `@JuliaRegistrator register`, and the commit to make it on; once the registry merges the first release, after its waiting period for new packages, the workflow registers later releases by itself.
+Registrator only acts on comments from accounts with write access, which an app's bot isn't, so the comment takes a machine user's token, as described in [The Registrator token](#the-registrator-token); TagBot then tags the release once the registry merges it.
+
 OneFlow and trunk, in `.github/workflows/OneFlow.yml` or `.github/workflows/Trunk.yml`:
 
 ```yaml
@@ -275,6 +297,15 @@ One app serves every repository of the organization that uses the release or bac
 The caller passes both secrets to the reusable workflow, which creates the app's token for its repository with `actions/create-github-app-token`.
 To check it, run the caller's Release workflow from the Actions tab: it pushes `release/vX.Y.Z` and opens its pull request as `<app>[bot]`, and its checks start.
 
+### The Registrator token
+
+Registrator acts on a comment `@JuliaRegistrator register` only from an account with write access to the repository, so the register workflow comments with a fine-grained personal access token of a machine user, an account that the maintainers share, such as a bot account of the organization.
+
+1. Give the machine user write access to the repositories that use the register workflow, through a team of the organization.
+2. Signed in as the machine user, open Settings → Developer settings → Personal access tokens → Fine-grained tokens, and choose "Generate new token", named such as `REGISTRATOR_TOKEN for <organization>`, with the organization as its resource owner, and an expiration.
+3. Under repository access, choose "Only select repositories", with those repositories, and under repository permissions, set Contents to Read and write, which commenting on a commit needs.
+4. Store it as an environment secret named `REGISTRATOR_TOKEN`, in each repository's `releaseflow` environment.
+
 ### Creating the ReleaseFlow token
 
 Where a GitHub App can't be created, such as for a repository of a personal account, a fine-grained personal access token does the same, in the secret `RELEASEFLOW_TOKEN`.
@@ -340,7 +371,7 @@ A release or hotfix branch, which `Self-Release.yml` prepares from the Actions t
 3. moves the changelog's unreleased entries into a `## [X.Y.Z]` section, with its comparison link.
 
 Once it merges into `master`:
-1. comment `@JuliaRegistrator register subdir=ReleaseFlow` on the commit, which registers ReleaseFlow in General from its subdirectory;
+1. `Self-Register.yml` comments `@JuliaRegistrator register subdir=ReleaseFlow` on the commit, with its section of the changelog, which registers ReleaseFlow in General from its subdirectory;
 2. once General merges the registration, TagBot tags the commit `vX.Y.Z`, with its GitHub release, which the workflows' calls of the action name;
 3. the Tag workflow, [`Self-Tag.yml`](.github/workflows/Self-Tag.yml), then moves the major tag, `v1`, to it, so callers get the release once it's registered and tagged.
 
