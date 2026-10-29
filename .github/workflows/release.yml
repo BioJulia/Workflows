@@ -68,6 +68,10 @@ on:
         description: The registry of the package's releases.
         type: string
         default: General
+      local-action:
+        description: Whether to run the action from the checked-out commit instead of its release, for BioJulia/Workflows' own releases, which may be the first to have a check that they call.
+        type: boolean
+        default: false
       environment:
         description: The deployment environment that holds the secrets, limited to the main and develop branches.
         type: string
@@ -140,8 +144,25 @@ jobs:
           set -euo pipefail
           version=$(sed -n 's/^version = "\(.*\)"$/\1/p' "${RELEASEFLOW_PROJECT:+${RELEASEFLOW_PROJECT%/}/}Project.toml")
           git switch --detach "v$version"
+      # The action at the release that this workflow belongs to, or, with `local-action`, at the checked-out commit.
       - id: prepare
+        if: ${{ !inputs.local-action }}
         uses: BioJulia/Workflows@v1.0.1
+        with:
+          check: prepare
+          model: ${{ inputs.model }}
+          project: ${{ inputs.project }}
+          kind: ${{ inputs.kind }}
+          step: ${{ inputs.step }}
+          main-branch: ${{ inputs.main-branch }}
+          develop-branch: ${{ inputs.develop-branch }}
+          base-ref: origin/${{ inputs.main-branch }}
+          pin-action: ${{ inputs.pin-action }}
+          check-links: ${{ inputs.check-links }}
+          registry: ${{ inputs.registry }}
+      - id: prepare-local
+        if: ${{ inputs.local-action }}
+        uses: ./
         with:
           check: prepare
           model: ${{ inputs.model }}
@@ -160,10 +181,10 @@ jobs:
           APP_SLUG: ${{ steps.app.outputs.app-slug }}
           REPOSITORY: ${{ github.repository }}
           RELEASEFLOW_KIND: ${{ inputs.kind }}
-          VERSION: ${{ steps.prepare.outputs.version }}
-          BRANCH: ${{ steps.prepare.outputs.branch }}
-          BASE: ${{ steps.prepare.outputs.base }}
-          NOTES: ${{ steps.prepare.outputs.notes }}
+          VERSION: ${{ steps.prepare.outputs.version || steps.prepare-local.outputs.version }}
+          BRANCH: ${{ steps.prepare.outputs.branch || steps.prepare-local.outputs.branch }}
+          BASE: ${{ steps.prepare.outputs.base || steps.prepare-local.outputs.base }}
+          NOTES: ${{ steps.prepare.outputs.notes || steps.prepare-local.outputs.notes }}
         run: |
           set -euo pipefail
           # A release's branch is new; one that exists is an earlier preparation, which a maintainer finishes or deletes.

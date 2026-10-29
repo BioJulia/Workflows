@@ -57,7 +57,7 @@ outputs:
     description: For the `is-release` check, whether the pull request is a release, `true` or `false`.
     value: ${{ steps.check.outputs.release }}
   version:
-    description: For `prepare`, the version of the prepared release.
+    description: For `prepare`, the version of the prepared release; for `registration`, the version at the head.
     value: ${{ steps.check.outputs.version }}
   branch:
     description: For `prepare`, the branch of the prepared release, `release/vX.Y.Z` or `hotfix/vX.Y.Z`.
@@ -66,8 +66,11 @@ outputs:
     description: For `prepare`, the branch that the prepared release merges into.
     value: ${{ steps.check.outputs.base }}
   notes:
-    description: For `prepare`, the prepared release's section of the changelog.
+    description: For `prepare` and `registration`, the release's section of the changelog.
     value: ${{ steps.check.outputs.notes }}
+  register:
+    description: For `registration`, whether the registry still lacks the version at the head, `true` or `false`.
+    value: ${{ steps.check.outputs.register }}
 
 runs:
   using: composite

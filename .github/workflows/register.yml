@@ -30,6 +30,10 @@ on:
         description: The registry of the package's releases.
         type: string
         default: General
+      local-action:
+        description: Whether to run the action from the checked-out commit instead of its release, for BioJulia/Workflows' own releases, which may be the first to have a check that they call.
+        type: boolean
+        default: false
       environment:
         description: The deployment environment that holds the secrets.
         type: string
@@ -52,21 +56,30 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+      # The action at the release that this workflow belongs to, or, with `local-action`, at the checked-out commit.
       - id: registration
+        if: ${{ !inputs.local-action }}
         uses: BioJulia/Workflows@v1.0.1
         with:
           check: registration
           project: ${{ inputs.project }}
           registry: ${{ inputs.registry }}
+      - id: registration-local
+        if: ${{ inputs.local-action }}
+        uses: ./
+        with:
+          check: registration
+          project: ${{ inputs.project }}
+          registry: ${{ inputs.registry }}
       - name: Comment for Registrator
-        if: steps.registration.outputs.register == 'true'
+        if: steps.registration.outputs.register == 'true' || steps.registration-local.outputs.register == 'true'
         env:
           GH_TOKEN: ${{ secrets.REGISTRATOR_TOKEN }}
           REPOSITORY: ${{ github.repository }}
           SHA: ${{ github.sha }}
           RELEASEFLOW_PROJECT: ${{ inputs.project }}
-          VERSION: ${{ steps.registration.outputs.version }}
-          NOTES: ${{ steps.registration.outputs.notes }}
+          VERSION: ${{ steps.registration.outputs.version || steps.registration-local.outputs.version }}
+          NOTES: ${{ steps.registration.outputs.notes || steps.registration-local.outputs.notes }}
         run: |
           set -euo pipefail
           if [ -z "$GH_TOKEN" ]; then

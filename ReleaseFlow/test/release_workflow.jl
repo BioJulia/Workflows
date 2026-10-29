@@ -58,3 +58,27 @@
     @test pushed("hotfix/v0.1.2") == "github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com> Hotfix 0.1.2"
     @test endswith(rstrip(read(log, String)), "--draft=true")
 end
+
+# The action at its release, or, with `local-action`, at the checked-out commit, as this repository's own releases run it; both steps take the same inputs.
+@testset "Local action" begin
+    for (file, id) in ["release.yml" => "prepare", "register.yml" => "registration"]
+        @test !isempty(step_inputs(file, id))
+        @test step_inputs(file, id) == step_inputs(file, "$(id)-local")
+    end
+end
+
+# A composite action passes on only the outputs that it declares, so every output that ReleaseFlow writes is declared in action.yml.
+@testset "Action outputs" begin
+    root = normpath(joinpath(@__DIR__, "..", ".."))
+    written = Set{String}()
+    for (directory, _, files) in walkdir(joinpath(root, "ReleaseFlow", "src")), file in files
+        for m in eachmatch(r"output\(settings, \"([a-z-]+)\"", read(joinpath(directory, file), String))
+            push!(written, m.captures[1])
+        end
+    end
+    lines = readlines(joinpath(root, "action.yml"))
+    start = findfirst(==("outputs:"), lines)
+    declared = Set(m.captures[1] for m in filter(!isnothing, match.(r"^  ([a-z-]+):$", lines[(start + 1):findnext(==("runs:"), lines, start)])))
+    @test !isempty(written)
+    @test written ⊆ declared
+end

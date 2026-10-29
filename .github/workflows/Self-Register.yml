@@ -16,6 +16,8 @@ jobs:
     permissions:
       contents: read
     with:
+      # The action from this commit: a release may be the first with a check that it calls, and its own tag only exists once it's registered.
+      local-action: true
       project: ReleaseFlow
     secrets:
       REGISTRATOR_TOKEN: ${{ secrets.REGISTRATOR_TOKEN }}
