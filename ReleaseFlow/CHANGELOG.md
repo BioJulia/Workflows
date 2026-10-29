@@ -6,6 +6,8 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-10-29
+
 ### Added
 
 - The reusable workflow `tag.yml`, which moves each major tag, such as `v1`, to the newest release of its major version, `vX.Y.Z`, whichever made the tag, TagBot or a maintainer, and whenever, for a repository that callers follow by its major tag; it only moves a major tag forwards, to a release that descends from where it is, leaves pre-releases out, and reports what it did for each major tag as a notice on the run and a line of the job's summary, or, where GitHub refuses a move, an error with GitHub's message.
@@ -45,6 +47,7 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - The back-merge workflow opens its pull request with a GitHub App's token, from the secrets `RELEASEFLOW_APP_CLIENT_ID` and `RELEASEFLOW_APP_PRIVATE_KEY`, in preference to `RELEASEFLOW_TOKEN`; the README explains how to create the app.
 - The back-merge workflow creates its branch with the job's own token, so the app or personal token needs only read and write access to pull requests; where GitHub refuses the job's token the branch, the other token creates it, with access to contents and workflows.
 
-[Unreleased]: https://github.com/BioJulia/Workflows/compare/v1.0.1...HEAD
+[Unreleased]: https://github.com/BioJulia/Workflows/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/BioJulia/Workflows/compare/v1.0.1...v1.1.0
 [1.0.1]: https://github.com/BioJulia/Workflows/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/BioJulia/Workflows/releases/tag/v1.0.0
