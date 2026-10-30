@@ -22,7 +22,7 @@ function check(::EntryCheck, settings::Settings)
     known = Set(base === nothing ? String[] : unreleased_entries(sections(base)))
     added = filter(entry -> !(entry in known), unreleased_entries(sections(text)))
     if isempty(added)
-        failure(settings, "Changelog entry", "CHANGELOG.md has no new entry under `## [Unreleased]`; describe the change there, or, for a change that users won't notice, a maintainer adds the `$(settings.skip_label)` label.")
+        failure(settings, "Changelog entry", "$(package_path(settings, "CHANGELOG.md")) has no new entry under `## [Unreleased]`; describe the change there, or, for a change that users won't notice, a maintainer adds the `$(settings.skip_label)` label.")
     else
         println("Changelog entry: $(length(added)) new $(length(added) == 1 ? "entry" : "entries") under `## [Unreleased]`.")
     end
