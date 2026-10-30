@@ -93,7 +93,7 @@ end
     branch!(work, "master", "master")
     git(work, "fetch", "-q", "origin")
     result = step()
-    @test result.code == 0 && occursin("there's nothing to bring", result.output) && isempty(result.calls)
+    @test result.code == 0 && occursin("there's nothing to bring back", result.output) && isempty(result.calls)
     # A package in a subdirectory names the branch from its own Project.toml.
     commit!(work, "Subdirectory", "lib/Toy/Project.toml" => project("0.3.0"), "subdirectory.txt" => "x")
     git(work, "push", "-q", "origin", "master")

@@ -145,7 +145,7 @@ jobs:
 
           # Nothing to bring if the other branch already has the commit.
           if git merge-base --is-ancestor "$sha" "origin/$into"; then
-            echo "$into already has $from's commit $sha; there's nothing to bring."
+            echo "$into already has $from's commit $sha; there's nothing to bring back."
             exit 0
           fi
 
