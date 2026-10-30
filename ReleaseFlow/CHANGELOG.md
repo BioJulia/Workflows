@@ -6,6 +6,21 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-10-29
+
+### Added
+
+- The reusable workflow `tag.yml`, which moves each major tag, such as `v1`, to the newest release of its major version, `vX.Y.Z`, whichever made the tag, TagBot or a maintainer, and whenever, for a repository that callers follow by its major tag; it only moves a major tag forwards, to a release that descends from where it is, leaves pre-releases out, and reports what it did for each major tag as a notice on the run and a line of the job's summary, or, where GitHub refuses a move, an error with GitHub's message.
+- This repository moves `v1` with it, through `Self-Tag.yml`, once TagBot tags a release `vX.Y.Z`, with `tag_prefix: NO_PREFIX`, in place of `ReleaseFlow-vX.Y.Z`, and with the ReleaseFlow app's token, which the ruleset on `v*` tags lets through; so the workflows' callers get a release once ReleaseFlow's is registered.
+- This repository's TagBot names `master` as its release branch, so that its tags land on `master`'s merge commits rather than on the back-merges into `develop`, which share their trees, once TagBot searches that branch first.
+- The reusable workflow `dependents.yml`, which runs the tests of the packages that depend on this one, each checked out at its default branch, with the pull request's branch in its place, as the checks `dependents / <repository>`.
+- The back-merge's inputs `from` and `into`, which bring any branch into any other, such as a maintenance branch into the main branch, from a branch `back-merge/<from>-<commit>`; by default, the main branch into develop, as before.
+- `registration`, which reports, as the action's outputs `version`, `register` and `notes`, the version at the head, whether the registry still lacks it, and its section of the changelog, as the release notes; where the registry doesn't know the package, its first release is registered by hand, and the check warns with the comment to make and the commit to make it on.
+- The reusable workflow `register.yml`, which comments `@JuliaRegistrator register`, with the release notes, on a release's commit once it merges, with a machine user's token, `REGISTRATOR_TOKEN`; TagBot then tags the release; and `Self-Register.yml`, which registers this repository's releases.
+- `prepare`, which prepares a release in a checkout of the branch it starts from: the next version after the last release, by `RELEASEFLOW_STEP`, where `auto` reads the unreleased section's `### Breaking` and `### Added`, set in `Project.toml`; the unreleased entries moved into its dated section, with the changelog's links; and the pins of `RELEASEFLOW_PIN_ACTION` set to it.
+- The reusable workflow `release.yml`, started from the Actions tab, which prepares a release or hotfix with `prepare`, pushes its branch, and opens its pull request, a draft for a hotfix, with the ReleaseFlow app's token; and `Self-Release.yml`, which prepares this repository's releases.
+- The input `local-action` of `release.yml` and `register.yml`, which runs the action from the checked-out commit instead of its release; `Self-Release.yml` and `Self-Register.yml` set it, since a release of this repository may be the first with a check that they call, and its own tag only exists once it's registered.
+
 ## [1.0.1] - 2026-10-20
 
 - The breaking check counts a name that still resolves as provided, such as an old name kept with `Base.@deprecate_binding`, which Julia's `names` leaves out; a rename through a deprecated binding is no longer reported as a removal.
@@ -32,6 +47,7 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - The back-merge workflow opens its pull request with a GitHub App's token, from the secrets `RELEASEFLOW_APP_CLIENT_ID` and `RELEASEFLOW_APP_PRIVATE_KEY`, in preference to `RELEASEFLOW_TOKEN`; the README explains how to create the app.
 - The back-merge workflow creates its branch with the job's own token, so the app or personal token needs only read and write access to pull requests; where GitHub refuses the job's token the branch, the other token creates it, with access to contents and workflows.
 
-[Unreleased]: https://github.com/BioJulia/Workflows/compare/v1.0.1...HEAD
+[Unreleased]: https://github.com/BioJulia/Workflows/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/BioJulia/Workflows/compare/v1.0.1...v1.1.0
 [1.0.1]: https://github.com/BioJulia/Workflows/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/BioJulia/Workflows/releases/tag/v1.0.0

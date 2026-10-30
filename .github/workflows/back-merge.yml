@@ -1,5 +1,5 @@
-# Back-merge, for gitflow: once a release or hotfix merges into the main branch, open the pull request that brings it back into develop.
-# Called from the repository's own workflow, on pushes to the main branch:
+# Back-merge: once a branch moves, open the pull request that brings it into another; for gitflow, by default, once a release or hotfix merges into the main branch, the pull request that brings it back into develop.
+# Called from the repository's own workflow, on pushes to the branch that it brings, under gitflow the main branch:
 #
 #   on:
 #     push:
@@ -15,15 +15,27 @@
 #         RELEASEFLOW_APP_CLIENT_ID: ${{ secrets.RELEASEFLOW_APP_CLIENT_ID }}
 #         RELEASEFLOW_APP_PRIVATE_KEY: ${{ secrets.RELEASEFLOW_APP_PRIVATE_KEY }}
 #
-# The pull request comes from a branch back-merge/vX.Y.Z at the main branch's commit, so that a conflict with develop is resolved on that branch, by merging develop into it, without pushing to the main branch.
+# With `from` and `into`, it brings any branch into any other, such as a maintenance branch into the main branch, on pushes to the maintenance branch:
+#
+#   on:
+#     push:
+#       branches: [release-1.x]
+#   jobs:
+#     back-merge:
+#       uses: BioJulia/Workflows/.github/workflows/back-merge.yml@v1
+#       with:
+#         from: release-1.x
+#         into: master
+#
+# The pull request comes from a branch at the commit that it brings: back-merge/vX.Y.Z from the main branch, named after its release, and back-merge/<from>-<commit> from any other, so that a conflict is resolved on that branch, by merging the branch that it goes into into it, without pushing to either.
 # Pull requests opened with the default GITHUB_TOKEN don't start workflows, so their required checks would never report.
 # Another token avoids that, with read and write access to pull requests, while the job's own token creates the branch; where GitHub refuses the job's token that branch, because its workflow files differ, the other token creates it, and then needs read and write access to contents and workflows too:
-# - a GitHub App's, created for each run from the secrets RELEASEFLOW_APP_CLIENT_ID and RELEASEFLOW_APP_PRIVATE_KEY, which opens the pull request as the app's bot;
+# - the ReleaseFlow app's, created for each run from the secrets RELEASEFLOW_APP_CLIENT_ID and RELEASEFLOW_APP_PRIVATE_KEY, which opens the pull request as the app's bot;
 # - or the secret RELEASEFLOW_TOKEN, a fine-grained personal access token, which opens it as the token's owner.
 # Without either, the default token opens the pull request, which says to close and reopen it, so that the checks run.
 # Either way, the repository must allow GitHub Actions to create pull requests, in Settings → Actions → General.
 #
-# The job runs in the deployment environment `environment`, `releaseflow` unless given: keep the secrets there, as environment secrets, and limit the environment to the main branch, so that a workflow on any other branch can't read them.
+# The job runs in the deployment environment `environment`, `releaseflow` unless given: keep the secrets there, as environment secrets, and limit the environment to the branches that it brings, so that a workflow on any other branch can't read them.
 name: "Reusable: Back-merge"
 
 on:
@@ -41,8 +53,16 @@ on:
         description: The package's directory, relative to the repository's root, whose Project.toml gives the version, for a package in a subdirectory.
         type: string
         default: ''
+      from:
+        description: The branch to bring; the main branch unless given.
+        type: string
+        default: ''
+      into:
+        description: The branch to bring it into; the develop branch unless given.
+        type: string
+        default: ''
       environment:
-        description: The deployment environment that holds the secrets, limited to the main branch.
+        description: The deployment environment that holds the secrets, limited to the branches that it brings.
         type: string
         default: releaseflow
     secrets:
@@ -67,14 +87,14 @@ jobs:
       pull-requests: write
     # The environment's secrets reach only jobs on the branches that the environment allows; GitHub uses them in place of secrets of the same name that the caller passes.
     environment: ${{ inputs.environment }}
-    # One back-merge at a time, so that two pushes to the main branch don't race to open the same pull request.
+    # One back-merge at a time between two branches, so that two pushes don't race to open the same pull request.
     concurrency:
-      group: back-merge-${{ github.repository }}
+      group: back-merge-${{ github.repository }}-${{ inputs.from || inputs.main-branch }}-${{ inputs.into || inputs.develop-branch }}
       cancel-in-progress: false
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ inputs.main-branch }}
+          ref: ${{ inputs.from || inputs.main-branch }}
           fetch-depth: 0
       # Secrets can't be tested in a step's condition, so this step tells whether a GitHub App is given.
       - id: app-given
@@ -88,7 +108,7 @@ jobs:
         with:
           client-id: ${{ secrets.RELEASEFLOW_APP_CLIENT_ID }}
           private-key: ${{ secrets.RELEASEFLOW_APP_PRIVATE_KEY }}
-      - name: Open the pull request from the main branch into develop
+      - name: Open the pull request that brings one branch into another
         env:
           # The pull request's token: the app's, or the personal one, or the default one, whose pull requests start no workflows.
           GH_TOKEN: ${{ steps.app.outputs.token || secrets.RELEASEFLOW_TOKEN || github.token }}
@@ -99,20 +119,33 @@ jobs:
           RELEASEFLOW_MAIN_BRANCH: ${{ inputs.main-branch }}
           RELEASEFLOW_DEVELOP_BRANCH: ${{ inputs.develop-branch }}
           RELEASEFLOW_PROJECT: ${{ inputs.project }}
+          FROM: ${{ inputs.from }}
+          INTO: ${{ inputs.into }}
         run: |
           set -euo pipefail
-          project_file="${RELEASEFLOW_PROJECT:+${RELEASEFLOW_PROJECT%/}/}Project.toml"
-          version=$(sed -n 's/^version = "\(.*\)"$/\1/p' "$project_file")
-          if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "::error title=Back-merge::$project_file on $RELEASEFLOW_MAIN_BRANCH has no version of the form X.Y.Z, so the back-merge branch can't be named."
-            exit 1
-          fi
-          branch="back-merge/v$version"
+          from="${FROM:-$RELEASEFLOW_MAIN_BRANCH}"
+          into="${INTO:-$RELEASEFLOW_DEVELOP_BRANCH}"
           sha=$(git rev-parse HEAD)
+          # From the main branch, the branch is named after the release, whose version Project.toml gives; from any other, after that branch and its commit.
+          if [ "$from" = "$RELEASEFLOW_MAIN_BRANCH" ]; then
+            project_file="${RELEASEFLOW_PROJECT:+${RELEASEFLOW_PROJECT%/}/}Project.toml"
+            version=$(sed -n 's/^version = "\(.*\)"$/\1/p' "$project_file")
+            if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+              echo "::error title=Back-merge::$project_file on $from has no version of the form X.Y.Z, so the back-merge branch can't be named."
+              exit 1
+            fi
+            branch="back-merge/v$version"
+            title="Merge $from (v$version) into $into"
+            reason="after the release or hotfix of v$version, as gitflow does"
+          else
+            branch="back-merge/${from//\//-}-${sha:0:7}"
+            title="Merge $from into $into"
+            reason="at its commit ${sha:0:7}"
+          fi
 
-          # Nothing to bring back if develop already has the main branch's commit.
-          if git merge-base --is-ancestor "$sha" "origin/$RELEASEFLOW_DEVELOP_BRANCH"; then
-            echo "$RELEASEFLOW_DEVELOP_BRANCH already has $RELEASEFLOW_MAIN_BRANCH's commit $sha; there's nothing to bring back."
+          # Nothing to bring if the other branch already has the commit.
+          if git merge-base --is-ancestor "$sha" "origin/$into"; then
+            echo "$into already has $from's commit $sha; there's nothing to bring back."
             exit 0
           fi
 
@@ -134,17 +167,17 @@ jobs:
             exit 1
           fi
 
-          open=$(gh pr list --repo "$REPOSITORY" --head "$branch" --base "$RELEASEFLOW_DEVELOP_BRANCH" --state open --json number --jq length)
+          open=$(gh pr list --repo "$REPOSITORY" --head "$branch" --base "$into" --state open --json number --jq length)
           if [ "$open" != "0" ]; then
-            echo "A pull request from $branch into $RELEASEFLOW_DEVELOP_BRANCH is open already."
+            echo "A pull request from $branch into $into is open already."
             exit 0
           fi
 
-          body="This brings $RELEASEFLOW_MAIN_BRANCH back into $RELEASEFLOW_DEVELOP_BRANCH after the release or hotfix of v$version, as gitflow does.
-          If it conflicts with $RELEASEFLOW_DEVELOP_BRANCH, merge $RELEASEFLOW_DEVELOP_BRANCH into $branch, resolve the conflicts there, and push."
+          body="This brings $from into $into $reason.
+          If it conflicts with $into, merge $into into $branch, resolve the conflicts there, and push."
           if [ "$HAS_TOKEN" != "true" ]; then
             body="$body
 
           It was opened with the default token, which doesn't start workflows, so close and reopen it to run the checks; a GitHub App or the secret RELEASEFLOW_TOKEN avoids this."
           fi
-          gh pr create --repo "$REPOSITORY" --head "$branch" --base "$RELEASEFLOW_DEVELOP_BRANCH" --title "Merge $RELEASEFLOW_MAIN_BRANCH (v$version) into $RELEASEFLOW_DEVELOP_BRANCH" --body "$body"
+          gh pr create --repo "$REPOSITORY" --head "$branch" --base "$into" --title "$title" --body "$body"

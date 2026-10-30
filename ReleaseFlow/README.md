@@ -22,7 +22,7 @@ RELEASEFLOW_MODEL=gitflow RELEASEFLOW_BASE_BRANCH=master RELEASEFLOW_HEAD_REF=re
 From a clone of BioJulia/Workflows, `--project=path/to/Workflows/ReleaseFlow` runs the clone's copy instead.
 `julia -m` needs Julia 1.12 or later.
 
-The checks are `source`, `version`, `changelog`, `breaking`, `entry` and `is-release`; the exit code is `0` where the check passes, `1` where it fails, with the failures as GitHub Actions annotations, and `2` for a wrong check or model.
+The checks are `source`, `version`, `changelog`, `breaking`, `entry` and `is-release`, and `prepare` prepares a release, in a checkout of the branch it starts from: it sets the version in `Project.toml`, moves the changelog's unreleased entries into the new version's section with its links, sets an action's pins, and writes the new branch's name, its base, the version and its notes as outputs, and `registration` reports, for the register workflow, the version at the head, whether the registry still lacks it, and its section of the changelog; the exit code is `0` where the check passes, `1` where it fails, with the failures as GitHub Actions annotations, and `2` for a wrong check or model.
 
 ## The initial release
 
@@ -52,6 +52,10 @@ The inputs are environment variables, so that branch names never reach a shell, 
 | `RELEASEFLOW_SKIP_LABEL` | `skip changelog` | That label, for messages. |
 | `RELEASEFLOW_CHECK_LINKS` | `true` | Whether to check the changelog's comparison links. |
 | `RELEASEFLOW_PROJECT` | the root | The package's directory, relative to the repository's root, for a package in a subdirectory, such as `lib/Toy`; its `Project.toml` and `CHANGELOG.md` are read there, and its releases are its directory's trees. |
+| `RELEASEFLOW_KIND` | `release` | For `prepare`: a `release` or a `hotfix`. |
+| `RELEASEFLOW_STEP` | `auto` | For `prepare`: the step of the version, `auto`, `patch`, `minor` or `major`. |
+| `RELEASEFLOW_DATE` | today, in UTC | For `prepare`: the date of the release's section. |
+| `RELEASEFLOW_PIN_ACTION` | none | For `prepare`: an action, such as `BioJulia/Workflows`, whose pins in `.github/workflows/` take the new version. |
 | `RELEASEFLOW_REGISTRY` | `General` | The name of an installed registry, or the path of a registry's directory, whose records give the commits of releases. |
 
 ## The code

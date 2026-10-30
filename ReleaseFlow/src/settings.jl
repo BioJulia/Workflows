@@ -22,6 +22,11 @@ struct Settings{M <: Model}
     skip_changelog::Bool
     check_links::Bool
     registry::String
+    # For `prepare`: the kind of release, `release` or `hotfix`, its step, `auto`, `patch`, `minor` or `major`, its date, and the action whose pins it sets.
+    kind::String
+    step::String
+    date::String
+    pin_action::String
     # Where GitHub Actions names the repository, takes a step's outputs and shows a job's summary; empty outside it.
     repository::String
     outputs::String
@@ -51,6 +56,10 @@ function Settings(environment = ENV; root = pwd())
         lowercase(input(environment, "RELEASEFLOW_SKIP_CHANGELOG", "false")) == "true",
         lowercase(input(environment, "RELEASEFLOW_CHECK_LINKS", "true")) == "true",
         input(environment, "RELEASEFLOW_REGISTRY", "General"),
+        lowercase(input(environment, "RELEASEFLOW_KIND", "release")),
+        lowercase(input(environment, "RELEASEFLOW_STEP", "auto")),
+        input(environment, "RELEASEFLOW_DATE", string(Date(now(UTC)))),
+        input(environment, "RELEASEFLOW_PIN_ACTION", ""),
         input(environment, "GITHUB_REPOSITORY", ""),
         input(environment, "GITHUB_OUTPUT", ""),
         input(environment, "GITHUB_STEP_SUMMARY", ""),

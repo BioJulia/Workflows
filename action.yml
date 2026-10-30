@@ -4,7 +4,7 @@ description: Checks a pull request of a Julia package under gitflow, OneFlow or 
 # Every input reaches the script through the environment, never the shell, so that a crafted branch name can't run commands.
 inputs:
   check:
-    description: The check to run, `source`, `version`, `changelog`, `breaking`, `entry` or `is-release`.
+    description: The check to run, `source`, `version`, `changelog`, `breaking`, `entry` or `is-release`, or `prepare`, which prepares a release.
     required: true
   model:
     description: The branching model, `gitflow`, `oneflow` or `trunk`.
@@ -39,11 +39,38 @@ inputs:
   registry:
     description: The registry whose records give the commits of releases.
     default: General
+  kind:
+    description: For `prepare`, the kind of release, `release` or `hotfix`.
+    default: release
+  step:
+    description: For `prepare`, the step of the version, `auto`, `patch`, `minor` or `major`.
+    default: auto
+  date:
+    description: For `prepare`, the date of the release's section; today, in UTC, if empty.
+    default: ''
+  pin-action:
+    description: 'For `prepare`, an action, such as `BioJulia/Workflows`, whose `uses: …@vX.Y.Z` pins in the workflows take the new version.'
+    default: ''
 
 outputs:
   release:
     description: For the `is-release` check, whether the pull request is a release, `true` or `false`.
     value: ${{ steps.check.outputs.release }}
+  version:
+    description: For `prepare`, the version of the prepared release; for `registration`, the version at the head.
+    value: ${{ steps.check.outputs.version }}
+  branch:
+    description: For `prepare`, the branch of the prepared release, `release/vX.Y.Z` or `hotfix/vX.Y.Z`.
+    value: ${{ steps.check.outputs.branch }}
+  base:
+    description: For `prepare`, the branch that the prepared release merges into.
+    value: ${{ steps.check.outputs.base }}
+  notes:
+    description: For `prepare` and `registration`, the release's section of the changelog.
+    value: ${{ steps.check.outputs.notes }}
+  register:
+    description: For `registration`, whether the registry still lacks the version at the head, `true` or `false`.
+    value: ${{ steps.check.outputs.register }}
 
 runs:
   using: composite
@@ -67,6 +94,10 @@ runs:
         RELEASEFLOW_CHECK_LINKS: ${{ inputs.check-links }}
         RELEASEFLOW_PROJECT: ${{ inputs.project }}
         RELEASEFLOW_REGISTRY: ${{ inputs.registry }}
+        RELEASEFLOW_KIND: ${{ inputs.kind }}
+        RELEASEFLOW_STEP: ${{ inputs.step }}
+        RELEASEFLOW_DATE: ${{ inputs.date }}
+        RELEASEFLOW_PIN_ACTION: ${{ inputs.pin-action }}
       run: |
         export RELEASEFLOW_BASE_REF="${BASE_REF_INPUT:-origin/$RELEASEFLOW_BASE_BRANCH}"
         export RELEASEFLOW_DEVELOP_REF="origin/$RELEASEFLOW_DEVELOP_BRANCH"

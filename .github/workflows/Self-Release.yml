@@ -1,0 +1,38 @@
+# This repository's own caller of the reusable release.yml, which other repositories call as BioJulia/Workflows/.github/workflows/release.yml@v1; the Self- files apply this repository's workflows to itself.
+# Started by hand, from the Actions tab: it prepares release/vX.Y.Z from develop, or hotfix/vX.Y.Z from master, with ReleaseFlow's version, the changelog's section and the pins of BioJulia/Workflows set, and opens its pull request into master.
+name: "Self: Release"
+
+on:
+  workflow_dispatch:
+    inputs:
+      kind:
+        description: A release, from develop, or a hotfix, from master.
+        type: choice
+        options: [release, hotfix]
+        default: release
+      step:
+        description: The step of the version; `auto` reads the changelog's unreleased section.
+        type: choice
+        options: [auto, patch, minor, major]
+        default: auto
+
+permissions: {}
+
+jobs:
+  release:
+    uses: ./.github/workflows/release.yml
+    permissions:
+      contents: read
+    with:
+      # The action from this commit: a release may be the first with a check that it calls, and its own tag only exists once it's registered.
+      local-action: true
+      model: gitflow
+      kind: ${{ inputs.kind }}
+      step: ${{ inputs.step }}
+      main-branch: master
+      project: ReleaseFlow
+      pin-action: BioJulia/Workflows
+    secrets:
+      RELEASEFLOW_APP_CLIENT_ID: ${{ secrets.RELEASEFLOW_APP_CLIENT_ID }}
+      RELEASEFLOW_APP_PRIVATE_KEY: ${{ secrets.RELEASEFLOW_APP_PRIVATE_KEY }}
+      RELEASEFLOW_TOKEN: ${{ secrets.RELEASEFLOW_TOKEN }}

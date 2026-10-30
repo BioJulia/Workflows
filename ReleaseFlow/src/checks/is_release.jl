@@ -5,6 +5,6 @@
 function check(::IsReleaseCheck, settings::Settings)
     release = is_release(settings)
     println(release ? "The pull request changes the version to $(head_version(settings)), so it's a release." : "The pull request keeps the version, so it isn't a release.")
-    isempty(settings.outputs) || open(io -> println(io, "release=$(release)"), settings.outputs, "a")
+    output(settings, "release", string(release))
     return
 end
