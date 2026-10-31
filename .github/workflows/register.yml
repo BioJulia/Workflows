@@ -59,7 +59,7 @@ jobs:
       # The action at the release that this workflow belongs to, or, with `local-action`, at the checked-out commit.
       - id: registration
         if: ${{ !inputs.local-action }}
-        uses: BioJulia/Workflows@v1.0.1
+        uses: BioJulia/Workflows@v1.1.0
         with:
           check: registration
           project: ${{ inputs.project }}

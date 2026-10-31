@@ -147,7 +147,7 @@ jobs:
       # The action at the release that this workflow belongs to, or, with `local-action`, at the checked-out commit.
       - id: prepare
         if: ${{ !inputs.local-action }}
-        uses: BioJulia/Workflows@v1.0.1
+        uses: BioJulia/Workflows@v1.1.0
         with:
           check: prepare
           model: ${{ inputs.model }}
