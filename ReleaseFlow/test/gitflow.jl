@@ -163,7 +163,12 @@ end
         release!(directory, "hotfix/v0.1.1", released, "0.1.1"; files = ["src/Toy.jl" => replace(SOURCE, "double(x; scale = 1) = 2x * scale" => "double(x) = 2x")])
         @test fails(on("hotfix/v0.1.1"), "A hotfix may not make breaking changes")
         release!(directory, "hotfix/v0.1.1", released, "0.1.1"; files = ["src/Toy.jl" => replace(SOURCE, "3x" => "3x + 1")])
-        @test fails(on("hotfix/v0.1.1"), "The tests of origin/master fail")
+        result = on("hotfix/v0.1.1")
+        @test fails(result, "The tests of origin/master fail")
+        # The failing test, with what it evaluated to, at its path in the repository.
+        @test occursin("Test Failed at test/runtests.jl:", result.output)
+        @test occursin("Expression: triple(2) == 6", result.output) && occursin("Evaluated: 7 == 6", result.output)
+        @test !occursin("Stacktrace:", result.output)
         release!(directory, "hotfix/v0.1.1", released, "0.1.1"; files = ["Project.toml" => project("0.1.1"; julia = "1.11")])
         @test fails(on("hotfix/v0.1.1"), "no longer admits")
     end

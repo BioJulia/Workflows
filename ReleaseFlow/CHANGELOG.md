@@ -6,6 +6,10 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Changed
+
+- The breaking check's summary shows each failing test of the last release with its expression, and what it evaluated to or the exception it threw, at its path in the repository, rather than only the line naming its file.
+
 ### Fixed
 
 - The checks' messages name the changelog by its path in the repository, such as `ReleaseFlow/CHANGELOG.md` for a package in a subdirectory, rather than `CHANGELOG.md`.
