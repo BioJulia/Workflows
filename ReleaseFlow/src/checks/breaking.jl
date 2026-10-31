@@ -139,7 +139,7 @@ function check_breaking(settings::Settings, release::LastRelease)
     parsed = sections(text)
     index = findfirst(section -> is_version(section, head), parsed)
     if index === nothing || subsection_entries(parsed[index], "Breaking") == 0
-        failure(settings, "Breaking changes", "The changes are breaking for users of $(release.version), so the section of $(head) in CHANGELOG.md needs a `### Breaking` subsection that describes them; see the job summary.")
+        failure(settings, "Breaking changes", "The changes are breaking for users of $(release.version), so the section of $(head) in $(package_path(settings, "CHANGELOG.md")) needs a `### Breaking` subsection that describes them; see the job summary.")
     end
     return
 end

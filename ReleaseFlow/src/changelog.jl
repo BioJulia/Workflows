@@ -129,27 +129,27 @@ compares_earlier(::InitialRelease) = false
 
 function check_links(settings::Settings, text, parsed, release::Baseline)
     url = repository_url(settings)
-    url === nothing && (failure(settings, "Changelog", "The repository's URL is unknown, so the links of CHANGELOG.md can't be checked; set `GITHUB_REPOSITORY`, such as `owner/Package.jl`."); return)
+    url === nothing && (failure(settings, "Changelog", "The repository's URL is unknown, so the links of $(package_path(settings, "CHANGELOG.md")) can't be checked; set `GITHUB_REPOSITORY`, such as `owner/Package.jl`."); return)
     definitions = links(text)
     released = versions(parsed)
     for (index, version) in enumerate(released)
         expected = index == length(released) ? "$(url)/releases/tag/v$(version)" : "$(url)/compare/v$(released[index + 1])...v$(version)"
         actual = get(definitions, string(version), get(definitions, "v$(version)", nothing))
         if actual === nothing
-            failure(settings, "Changelog", "CHANGELOG.md has no link for $(version); add `[$(version)]: $(expected)` at its end.")
+            failure(settings, "Changelog", "$(package_path(settings, "CHANGELOG.md")) has no link for $(version); add `[$(version)]: $(expected)` at its end.")
         elseif actual != expected && !(index == length(released) && compares_earlier(release) && from_earlier(actual, url, version))
-            failure(settings, "Changelog", "The link for $(version) in CHANGELOG.md is $(actual), but it should be $(expected).")
+            failure(settings, "Changelog", "The link for $(version) in $(package_path(settings, "CHANGELOG.md")) is $(actual), but it should be $(expected).")
         end
     end
     if unreleased_index(parsed) !== nothing
-        occursin(r"^##\s+\[Unreleased\]\s*$"im, text) || failure(settings, "Changelog", "Head the unreleased section of CHANGELOG.md `## [Unreleased]`, so that it links to the unreleased changes.")
+        occursin(r"^##\s+\[Unreleased\]\s*$"im, text) || failure(settings, "Changelog", "Head the unreleased section of $(package_path(settings, "CHANGELOG.md")) `## [Unreleased]`, so that it links to the unreleased changes.")
         if !isempty(released)
             expected = "$(url)/compare/v$(first(released))...HEAD"
             actual = get(definitions, "unreleased", nothing)
             if actual === nothing
-                failure(settings, "Changelog", "CHANGELOG.md has no link for the unreleased changes; add `[Unreleased]: $(expected)` at its end.")
+                failure(settings, "Changelog", "$(package_path(settings, "CHANGELOG.md")) has no link for the unreleased changes; add `[Unreleased]: $(expected)` at its end.")
             elseif actual != expected
-                failure(settings, "Changelog", "The link for the unreleased changes in CHANGELOG.md is $(actual), but it should be $(expected).")
+                failure(settings, "Changelog", "The link for the unreleased changes in $(package_path(settings, "CHANGELOG.md")) is $(actual), but it should be $(expected).")
             end
         end
     end

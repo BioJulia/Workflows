@@ -6,6 +6,10 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Fixed
+
+- The checks' messages name the changelog by its path in the repository, such as `ReleaseFlow/CHANGELOG.md` for a package in a subdirectory, rather than `CHANGELOG.md`.
+
 ## [1.1.0] - 2026-10-29
 
 ### Added
