@@ -153,14 +153,12 @@ jobs:
   register:
     uses: BioJulia/Workflows/.github/workflows/register.yml@v1
     permissions:
-      contents: read
-    secrets:
-      REGISTRATOR_TOKEN: ${{ secrets.REGISTRATOR_TOKEN }}
+      contents: write
 ```
 
 A commit whose version the registry already records has nothing to register, so a push that releases nothing does nothing.
 A package's first release is registered by hand, since the registry reviews a new package before it merges: where the registry doesn't know the package, the workflow doesn't comment, and its warning and job summary give the comment to make, `@JuliaRegistrator register`, and the commit to make it on; once the registry merges the first release, after its waiting period for new packages, the workflow registers later releases by itself.
-Registrator only acts on comments from accounts with write access, which an app's bot isn't, so the comment takes a machine user's token, as described in [The Registrator token](#the-registrator-token); TagBot then tags the release once the registry merges it.
+Registrator acts on comments from the repository's collaborators and its organization's members, which an app's bot isn't, and from `github-actions[bot]`, so the workflow comments with its own `GITHUB_TOKEN`, which needs the permission `contents: write` that the caller grants; where it's given, the secret `REGISTRATOR_TOKEN` comments instead, as described in [The Registrator token](#the-registrator-token). TagBot then tags the release once the registry merges it.
 
 OneFlow and trunk, in `.github/workflows/OneFlow.yml` or `.github/workflows/Trunk.yml`:
 
@@ -299,12 +297,13 @@ To check it, run the caller's Release workflow from the Actions tab: it pushes `
 
 ### The Registrator token
 
-Registrator acts on a comment `@JuliaRegistrator register` only from an account with write access to the repository, so the register workflow comments with a fine-grained personal access token of a machine user, an account that the maintainers share, such as a bot account of the organization.
+The register workflow comments with its own `GITHUB_TOKEN`, as `github-actions[bot]`, so it needs no secret.
+Where the comment should come from another account, such as a machine user that the maintainers share, the secret `REGISTRATOR_TOKEN`, a fine-grained personal access token of that account, comments instead:
 
-1. Give the machine user write access to the repositories that use the register workflow, through a team of the organization.
-2. Signed in as the machine user, open Settings → Developer settings → Personal access tokens → Fine-grained tokens, and choose "Generate new token", named such as `REGISTRATOR_TOKEN for <organization>`, with the organization as its resource owner, and an expiration.
+1. Give the account write access to the repositories that use the register workflow, through a team of the organization.
+2. Signed in as the account, open Settings → Developer settings → Personal access tokens → Fine-grained tokens, and choose "Generate new token", named such as `REGISTRATOR_TOKEN for <organization>`, with the organization as its resource owner, and an expiration.
 3. Under repository access, choose "Only select repositories", with those repositories, and under repository permissions, set Contents to Read and write, which commenting on a commit needs.
-4. Store it as an environment secret named `REGISTRATOR_TOKEN`, in each repository's `releaseflow` environment.
+4. Store it as an environment secret named `REGISTRATOR_TOKEN`, in each repository's `releaseflow` environment, and pass it to the register workflow with `secrets: { REGISTRATOR_TOKEN: ${{ secrets.REGISTRATOR_TOKEN }} }`.
 
 ### Creating the ReleaseFlow token
 

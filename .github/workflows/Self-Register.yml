@@ -13,11 +13,10 @@ permissions: {}
 jobs:
   register:
     uses: ./.github/workflows/register.yml
+    # The comment, as github-actions[bot], needs contents: write.
     permissions:
-      contents: read
+      contents: write
     with:
       # The action from this commit: a release may be the first with a check that it calls, and its own tag only exists once it's registered.
       local-action: true
       project: ReleaseFlow
-    secrets:
-      REGISTRATOR_TOKEN: ${{ secrets.REGISTRATOR_TOKEN }}
