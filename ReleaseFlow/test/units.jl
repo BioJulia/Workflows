@@ -80,6 +80,33 @@ const R = ReleaseFlow
         @test isempty(narrowed) && isempty(other)
     end
 
+    @testset "test failures" begin
+        directory = mktempdir()
+        file = joinpath(directory, "test", "runtests.jl")
+        output = """
+        Toy: Test Failed at $(file):4
+          Expression: triple(2) == 6
+           Evaluated: 7 == 6
+          Stacktrace:
+           [1] top-level scope
+             @ $(file):4
+
+        Toy: Error During Test at $(file):6
+          Test threw exception
+          Expression: error("boom")
+          boom
+          Stacktrace:
+           [1] error(s::String)
+        Test Summary: | Fail  Error  Total  Time
+        Toy           |    1      1      2  0.1s
+        """
+        failures = R.test_failures(output, directory)
+        @test failures[1] == "Toy: Test Failed at test/runtests.jl:4\n  Expression: triple(2) == 6\n   Evaluated: 7 == 6"
+        @test failures[2] == "Toy: Error During Test at test/runtests.jl:6\n  Test threw exception\n  Expression: error(\"boom\")\n  boom"
+        @test length(failures) == 2
+        @test isempty(R.test_failures("Test Summary: | Pass  Total\n", directory))
+    end
+
     @testset "main" begin
         @test redirect_stderr(() -> R.main(String[]), devnull) == 2
         @test redirect_stderr(() -> R.main(["nonsense"]), devnull) == 2

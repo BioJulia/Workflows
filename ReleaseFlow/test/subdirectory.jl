@@ -33,9 +33,11 @@ const LIB_TESTS = TESTS * "@test isfile(joinpath(@__DIR__, \"..\", \"..\", \"..\
     @test passes(on("feature/x", "entry"))
     branch!(directory, "feature/y", feature)
     commit!(directory, "Work", "README.md" => "Toy, documented.")
-    @test fails(on("feature/y", "entry"), "no new entry")
+    # Its messages name the changelog by its path in the repository.
+    @test fails(on("feature/y", "entry"), "lib/Toy/CHANGELOG.md has no new entry")
     # A breaking change is found in the package's directory.
     branch!(directory, "release/v0.1.1", feature)
     commit!(directory, "Release 0.1.1", in_lib("Project.toml" => project("0.1.1"), "src/Toy.jl" => replace(SOURCE, "triple(x) = 3x" => ""), "CHANGELOG.md" => changelog(released = ["0.1.1" => ["A feature."], "0.1.0" => ["First."]]))...)
     @test fails(on("release/v0.1.1", "breaking"), "must be 0.2.0 or 1.0.0, not 0.1.1")
+    @test fails(on("release/v0.1.1", "breaking"), "the section of 0.1.1 in lib/Toy/CHANGELOG.md needs a `### Breaking` subsection")
 end

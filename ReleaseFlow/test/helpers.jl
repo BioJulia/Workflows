@@ -148,13 +148,20 @@ fails(result, message) = result.code == 1 && occursin(message, result.output)
 # ---------
 
 # The shell of the step `name` of the workflow `file`, in .github/workflows: the block after its `run: |`, without its indentation.
-# The `with:` lines of the step `- id: <id>` in a workflow, which the steps that run the action at its release and at the checkout share.
-function step_inputs(file, id)
+# The lines of each job of a workflow, by its key under `jobs:`.
+function workflow_jobs(file)
     lines = readlines(normpath(joinpath(@__DIR__, "..", "..", ".github", "workflows", file)))
-    start = findnext(line -> strip(line) == "with:", lines, findfirst(line -> strip(line) == "- id: $(id)", lines))
-    indentation = length(match(r"^ *", lines[start]).match)
-    stop = findnext(line -> length(match(r"^ *", line).match) <= indentation, lines, start + 1)
-    return lines[(start + 1):(stop - 1)]
+    jobs = Dict{String, Vector{String}}()
+    current = nothing
+    for line in lines[(findfirst(==("jobs:"), lines) + 1):end]
+        key = match(r"^  ([a-z-]+):$", line)
+        if key !== nothing
+            current = jobs[key.captures[1]] = String[]
+        elseif current !== nothing
+            push!(current, line)
+        end
+    end
+    return jobs
 end
 
 function workflow_step(file, name)

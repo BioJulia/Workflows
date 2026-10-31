@@ -59,12 +59,48 @@
     @test endswith(rstrip(read(log, String)), "--draft=true")
 end
 
-# The action at its release, or, with `local-action`, at the checked-out commit, as this repository's own releases run it; both steps take the same inputs.
+# GitHub resolves every action of a job before it runs, even one whose step is skipped, so the action at its release and at the checkout, with `local-action`, are in jobs of their own; the job that's skipped resolves nothing.
 @testset "Local action" begin
-    for (file, id) in ["release.yml" => "prepare", "register.yml" => "registration"]
-        @test !isempty(step_inputs(file, id))
-        @test step_inputs(file, id) == step_inputs(file, "$(id)-local")
+    pinned(line) = occursin(r"uses: BioJulia/Workflows@v\d+\.\d+\.\d+$", line)
+    checkout(line) = endswith(line, "uses: ./")
+    for (file, key, token) in [("release.yml", "prepare", "push"), ("register.yml", "registration", "register")]
+        jobs = workflow_jobs(file)
+        @test !any(lines -> any(pinned, lines) && any(checkout, lines), values(jobs))
+        # The job at the checkout is the job at the release, but for its action, its condition, and its step's id, which is its job's key, so that each step's id is unique in the workflow.
+        local_job = map(jobs[key]) do line
+            pinned(line) && return replace(line, r"BioJulia/Workflows@\S+" => "./")
+            return replace(line, "if: \${{ !inputs.local-action }}" => "if: \${{ inputs.local-action }}", "- id: $(key)" => "- id: $(key)-local", "steps.$(key)." => "steps.$(key)-local.")
+        end
+        @test count(pinned, jobs[key]) == 1
+        @test local_job == jobs["$(key)-local"]
+        # The job with the tokens runs neither.
+        @test !any(line -> pinned(line) || checkout(line), jobs[token])
     end
+end
+
+# The prepare job passes on its changes, which the push job applies to the same commit.
+@testset "Prepared changes" begin
+    work = repository()
+    commit!(work, "Start", "Project.toml" => project("0.1.0"), "CHANGELOG.md" => changelog(unreleased = ["A feature."], released = ["0.1.0" => ["First."]]))
+    head = git(work, "rev-parse", "HEAD")
+    write(joinpath(work, "Project.toml"), project("0.2.0"))
+    write(joinpath(work, "CHANGELOG.md"), changelog(released = ["0.2.0" => ["A feature."], "0.1.0" => ["First."]]))
+    expected = git(work, "diff")
+    output = tempname()
+    keep = joinpath(mktempdir(), "keep.sh")
+    write(keep, workflow_step("release.yml", "Keep the prepared changes"))
+    run(Cmd(addenv(`bash $(keep)`, "GITHUB_OUTPUT" => output); dir = work))
+    outputs = Dict(split(line, "="; limit = 2) for line in readlines(output))
+    @test outputs["commit"] == head
+    git(work, "checkout", "-q", "--", ".")
+    @test isempty(git(work, "diff"))
+    apply = joinpath(mktempdir(), "apply.sh")
+    write(apply, workflow_step("release.yml", "Apply the prepared changes"))
+    run(Cmd(addenv(`bash $(apply)`, "PATCH" => outputs["patch"]); dir = work))
+    @test git(work, "diff") == expected
+    # Without changes, there's nothing to push.
+    process = run(pipeline(Cmd(addenv(`bash $(apply)`, "PATCH" => ""); dir = work, ignorestatus = true); stdout = devnull, stderr = devnull))
+    @test process.exitcode == 1
 end
 
 # A composite action passes on only the outputs that it declares, so every output that ReleaseFlow writes is declared in action.yml.

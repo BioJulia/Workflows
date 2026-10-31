@@ -26,7 +26,7 @@
 # A release starts from develop under gitflow, and from the main branch otherwise; a hotfix starts from the main branch, or under OneFlow from the last release's tag.
 # The step `auto` reads the changelog's unreleased section: `### Breaking` takes a breaking version, `### Added` the next minor version, and anything else the next patch; a hotfix is always the next patch, and its section waits for the fix's entry, so its pull request is a draft.
 # The branch and pull request need a token other than GITHUB_TOKEN, whose pull requests start no checks, and which can't push workflow files: the ReleaseFlow app's, from RELEASEFLOW_APP_CLIENT_ID and RELEASEFLOW_APP_PRIVATE_KEY, or the personal access token RELEASEFLOW_TOKEN.
-# The job runs in the deployment environment `environment`, `releaseflow` unless given, which keeps those secrets and allows the main and develop branches.
+# The push job, which pushes the branch and opens the pull request, runs in the deployment environment `environment`, `releaseflow` unless given, which keeps those secrets and allows the main and develop branches.
 name: "Reusable: Release"
 
 on:
@@ -90,8 +90,135 @@ on:
 permissions: {}
 
 jobs:
+  # GitHub resolves every action of a job before it runs, even one whose step is skipped, and a release's own tag only exists once it's registered.
+  # So the action runs in one of two jobs: at the release that this workflow belongs to, or, with `local-action`, at the checked-out commit.
+  # Neither has the token that pushes the branch; the push job, which runs none of this repository's actions, applies the changes that they prepare.
   prepare:
     name: Prepare
+    if: ${{ !inputs.local-action }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      version: ${{ steps.prepare.outputs.version }}
+      branch: ${{ steps.prepare.outputs.branch }}
+      base: ${{ steps.prepare.outputs.base }}
+      notes: ${{ steps.prepare.outputs.notes }}
+      commit: ${{ steps.changes.outputs.commit }}
+      patch: ${{ steps.changes.outputs.patch }}
+    steps:
+      # A release starts from develop under gitflow, and from the main branch otherwise, as does a hotfix.
+      - id: start
+        env:
+          RELEASEFLOW_MODEL: ${{ inputs.model }}
+          RELEASEFLOW_KIND: ${{ inputs.kind }}
+          RELEASEFLOW_MAIN_BRANCH: ${{ inputs.main-branch }}
+          RELEASEFLOW_DEVELOP_BRANCH: ${{ inputs.develop-branch }}
+        run: |
+          if [ "$RELEASEFLOW_MODEL" = gitflow ] && [ "$RELEASEFLOW_KIND" = release ]; then
+            echo "ref=$RELEASEFLOW_DEVELOP_BRANCH" >> "$GITHUB_OUTPUT"
+          else
+            echo "ref=$RELEASEFLOW_MAIN_BRANCH" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ steps.start.outputs.ref }}
+          fetch-depth: 0
+      - name: Start a OneFlow hotfix from the last release's tag
+        if: inputs.model == 'oneflow' && inputs.kind == 'hotfix'
+        env:
+          RELEASEFLOW_PROJECT: ${{ inputs.project }}
+        run: |
+          set -euo pipefail
+          version=$(sed -n 's/^version = "\(.*\)"$/\1/p' "${RELEASEFLOW_PROJECT:+${RELEASEFLOW_PROJECT%/}/}Project.toml")
+          git switch --detach "v$version"
+      - id: prepare
+        uses: BioJulia/Workflows@v1.1.1
+        with:
+          check: prepare
+          model: ${{ inputs.model }}
+          project: ${{ inputs.project }}
+          kind: ${{ inputs.kind }}
+          step: ${{ inputs.step }}
+          main-branch: ${{ inputs.main-branch }}
+          develop-branch: ${{ inputs.develop-branch }}
+          base-ref: origin/${{ inputs.main-branch }}
+          pin-action: ${{ inputs.pin-action }}
+          check-links: ${{ inputs.check-links }}
+          registry: ${{ inputs.registry }}
+      # The prepared changes, for the push job, with the commit that they apply to.
+      - name: Keep the prepared changes
+        id: changes
+        run: |
+          set -euo pipefail
+          echo "commit=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          echo "patch=$(git diff --binary | base64 | tr -d '\n')" >> "$GITHUB_OUTPUT"
+
+  prepare-local:
+    name: Prepare
+    if: ${{ inputs.local-action }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      version: ${{ steps.prepare-local.outputs.version }}
+      branch: ${{ steps.prepare-local.outputs.branch }}
+      base: ${{ steps.prepare-local.outputs.base }}
+      notes: ${{ steps.prepare-local.outputs.notes }}
+      commit: ${{ steps.changes.outputs.commit }}
+      patch: ${{ steps.changes.outputs.patch }}
+    steps:
+      # A release starts from develop under gitflow, and from the main branch otherwise, as does a hotfix.
+      - id: start
+        env:
+          RELEASEFLOW_MODEL: ${{ inputs.model }}
+          RELEASEFLOW_KIND: ${{ inputs.kind }}
+          RELEASEFLOW_MAIN_BRANCH: ${{ inputs.main-branch }}
+          RELEASEFLOW_DEVELOP_BRANCH: ${{ inputs.develop-branch }}
+        run: |
+          if [ "$RELEASEFLOW_MODEL" = gitflow ] && [ "$RELEASEFLOW_KIND" = release ]; then
+            echo "ref=$RELEASEFLOW_DEVELOP_BRANCH" >> "$GITHUB_OUTPUT"
+          else
+            echo "ref=$RELEASEFLOW_MAIN_BRANCH" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ steps.start.outputs.ref }}
+          fetch-depth: 0
+      - name: Start a OneFlow hotfix from the last release's tag
+        if: inputs.model == 'oneflow' && inputs.kind == 'hotfix'
+        env:
+          RELEASEFLOW_PROJECT: ${{ inputs.project }}
+        run: |
+          set -euo pipefail
+          version=$(sed -n 's/^version = "\(.*\)"$/\1/p' "${RELEASEFLOW_PROJECT:+${RELEASEFLOW_PROJECT%/}/}Project.toml")
+          git switch --detach "v$version"
+      - id: prepare-local
+        uses: ./
+        with:
+          check: prepare
+          model: ${{ inputs.model }}
+          project: ${{ inputs.project }}
+          kind: ${{ inputs.kind }}
+          step: ${{ inputs.step }}
+          main-branch: ${{ inputs.main-branch }}
+          develop-branch: ${{ inputs.develop-branch }}
+          base-ref: origin/${{ inputs.main-branch }}
+          pin-action: ${{ inputs.pin-action }}
+          check-links: ${{ inputs.check-links }}
+          registry: ${{ inputs.registry }}
+      # The prepared changes, for the push job, with the commit that they apply to.
+      - name: Keep the prepared changes
+        id: changes
+        run: |
+          set -euo pipefail
+          echo "commit=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          echo "patch=$(git diff --binary | base64 | tr -d '\n')" >> "$GITHUB_OUTPUT"
+
+  push:
+    name: Push
+    needs: [prepare, prepare-local]
+    if: ${{ !cancelled() && (needs.prepare.result == 'success' || needs.prepare-local.result == 'success') }}
     runs-on: ubuntu-latest
     environment: ${{ inputs.environment }}
     # The branch and pull request take the ReleaseFlow app's token, or the personal one; the job's own only reads.
@@ -117,74 +244,32 @@ jobs:
             echo "::error title=Release::Preparing a release needs the ReleaseFlow app's secrets, RELEASEFLOW_APP_CLIENT_ID and RELEASEFLOW_APP_PRIVATE_KEY, or RELEASEFLOW_TOKEN, since the default token's pull requests start no checks."
             exit 1
           fi
-      # A release starts from develop under gitflow, and from the main branch otherwise, as does a hotfix.
-      - id: start
-        env:
-          RELEASEFLOW_MODEL: ${{ inputs.model }}
-          RELEASEFLOW_KIND: ${{ inputs.kind }}
-          RELEASEFLOW_MAIN_BRANCH: ${{ inputs.main-branch }}
-          RELEASEFLOW_DEVELOP_BRANCH: ${{ inputs.develop-branch }}
-        run: |
-          if [ "$RELEASEFLOW_MODEL" = gitflow ] && [ "$RELEASEFLOW_KIND" = release ]; then
-            echo "ref=$RELEASEFLOW_DEVELOP_BRANCH" >> "$GITHUB_OUTPUT"
-          else
-            echo "ref=$RELEASEFLOW_MAIN_BRANCH" >> "$GITHUB_OUTPUT"
-          fi
       # With the token that pushes the branch, which may carry workflow files.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ steps.start.outputs.ref }}
+          ref: ${{ needs.prepare.outputs.commit || needs.prepare-local.outputs.commit }}
           fetch-depth: 0
           token: ${{ steps.app.outputs.token || secrets.RELEASEFLOW_TOKEN }}
-      - name: Start a OneFlow hotfix from the last release's tag
-        if: inputs.model == 'oneflow' && inputs.kind == 'hotfix'
+      - name: Apply the prepared changes
         env:
-          RELEASEFLOW_PROJECT: ${{ inputs.project }}
+          PATCH: ${{ needs.prepare.outputs.patch || needs.prepare-local.outputs.patch }}
         run: |
           set -euo pipefail
-          version=$(sed -n 's/^version = "\(.*\)"$/\1/p' "${RELEASEFLOW_PROJECT:+${RELEASEFLOW_PROJECT%/}/}Project.toml")
-          git switch --detach "v$version"
-      # The action at the release that this workflow belongs to, or, with `local-action`, at the checked-out commit.
-      - id: prepare
-        if: ${{ !inputs.local-action }}
-        uses: BioJulia/Workflows@v1.1.0
-        with:
-          check: prepare
-          model: ${{ inputs.model }}
-          project: ${{ inputs.project }}
-          kind: ${{ inputs.kind }}
-          step: ${{ inputs.step }}
-          main-branch: ${{ inputs.main-branch }}
-          develop-branch: ${{ inputs.develop-branch }}
-          base-ref: origin/${{ inputs.main-branch }}
-          pin-action: ${{ inputs.pin-action }}
-          check-links: ${{ inputs.check-links }}
-          registry: ${{ inputs.registry }}
-      - id: prepare-local
-        if: ${{ inputs.local-action }}
-        uses: ./
-        with:
-          check: prepare
-          model: ${{ inputs.model }}
-          project: ${{ inputs.project }}
-          kind: ${{ inputs.kind }}
-          step: ${{ inputs.step }}
-          main-branch: ${{ inputs.main-branch }}
-          develop-branch: ${{ inputs.develop-branch }}
-          base-ref: origin/${{ inputs.main-branch }}
-          pin-action: ${{ inputs.pin-action }}
-          check-links: ${{ inputs.check-links }}
-          registry: ${{ inputs.registry }}
+          if [ -z "$PATCH" ]; then
+            echo "::error title=Release::The prepare job passed on no changes."
+            exit 1
+          fi
+          echo "$PATCH" | base64 -d | git apply
       - name: Push the branch and open the pull request
         env:
           GH_TOKEN: ${{ steps.app.outputs.token || secrets.RELEASEFLOW_TOKEN }}
           APP_SLUG: ${{ steps.app.outputs.app-slug }}
           REPOSITORY: ${{ github.repository }}
           RELEASEFLOW_KIND: ${{ inputs.kind }}
-          VERSION: ${{ steps.prepare.outputs.version || steps.prepare-local.outputs.version }}
-          BRANCH: ${{ steps.prepare.outputs.branch || steps.prepare-local.outputs.branch }}
-          BASE: ${{ steps.prepare.outputs.base || steps.prepare-local.outputs.base }}
-          NOTES: ${{ steps.prepare.outputs.notes || steps.prepare-local.outputs.notes }}
+          VERSION: ${{ needs.prepare.outputs.version || needs.prepare-local.outputs.version }}
+          BRANCH: ${{ needs.prepare.outputs.branch || needs.prepare-local.outputs.branch }}
+          BASE: ${{ needs.prepare.outputs.base || needs.prepare-local.outputs.base }}
+          NOTES: ${{ needs.prepare.outputs.notes || needs.prepare-local.outputs.notes }}
         run: |
           set -euo pipefail
           # A release's branch is new; one that exists is an earlier preparation, which a maintainer finishes or deletes.
