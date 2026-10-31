@@ -6,6 +6,8 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [1.1.1] - 2026-10-31
+
 ### Changed
 
 - The breaking check's summary shows each failing test of the last release with its expression, and what it evaluated to or the exception it threw, at its path in the repository, rather than only the line naming its file.
@@ -56,7 +58,8 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - The back-merge workflow opens its pull request with a GitHub App's token, from the secrets `RELEASEFLOW_APP_CLIENT_ID` and `RELEASEFLOW_APP_PRIVATE_KEY`, in preference to `RELEASEFLOW_TOKEN`; the README explains how to create the app.
 - The back-merge workflow creates its branch with the job's own token, so the app or personal token needs only read and write access to pull requests; where GitHub refuses the job's token the branch, the other token creates it, with access to contents and workflows.
 
-[Unreleased]: https://github.com/BioJulia/Workflows/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/BioJulia/Workflows/compare/v1.1.1...HEAD
+[1.1.1]: https://github.com/BioJulia/Workflows/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/BioJulia/Workflows/compare/v1.0.1...v1.1.0
 [1.0.1]: https://github.com/BioJulia/Workflows/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/BioJulia/Workflows/releases/tag/v1.0.0
