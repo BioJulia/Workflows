@@ -16,7 +16,7 @@
 # Registrator only acts on comments from accounts with write access to the repository, which an app's bot isn't, so the comment takes REGISTRATOR_TOKEN, a fine-grained personal access token of a machine user with write access.
 # A package's first release is registered by hand, which the workflow's warning says how to do.
 # TagBot tags the release once the registry merges it.
-# The job runs in the deployment environment `environment`, `releaseflow` unless given, which keeps the secret.
+# The register job, which comments, runs in the deployment environment `environment`, `releaseflow` unless given, which keeps the secret.
 name: "Reusable: Register"
 
 on:
@@ -46,40 +46,67 @@ on:
 permissions: {}
 
 jobs:
-  register:
-    name: Register
+  # GitHub resolves every action of a job before it runs, even one whose step is skipped, and a release's own tag only exists once it's registered.
+  # So the action runs in one of two jobs: at the release that this workflow belongs to, or, with `local-action`, at the checked-out commit.
+  # The register job, which runs none of this repository's actions, comments with the machine user's token.
+  registration:
+    name: Registration
+    if: ${{ !inputs.local-action }}
     runs-on: ubuntu-latest
-    environment: ${{ inputs.environment }}
     permissions:
       contents: read
+    outputs:
+      register: ${{ steps.registration.outputs.register }}
+      version: ${{ steps.registration.outputs.version }}
+      notes: ${{ steps.registration.outputs.notes }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
-      # The action at the release that this workflow belongs to, or, with `local-action`, at the checked-out commit.
       - id: registration
-        if: ${{ !inputs.local-action }}
         uses: BioJulia/Workflows@v1.1.0
         with:
           check: registration
           project: ${{ inputs.project }}
           registry: ${{ inputs.registry }}
-      - id: registration-local
-        if: ${{ inputs.local-action }}
+
+  registration-local:
+    name: Registration
+    if: ${{ inputs.local-action }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      register: ${{ steps.registration.outputs.register }}
+      version: ${{ steps.registration.outputs.version }}
+      notes: ${{ steps.registration.outputs.notes }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - id: registration
         uses: ./
         with:
           check: registration
           project: ${{ inputs.project }}
           registry: ${{ inputs.registry }}
+
+  register:
+    name: Register
+    needs: [registration, registration-local]
+    if: ${{ !cancelled() && (needs.registration.outputs.register == 'true' || needs.registration-local.outputs.register == 'true') }}
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    permissions: {}
+    steps:
       - name: Comment for Registrator
-        if: steps.registration.outputs.register == 'true' || steps.registration-local.outputs.register == 'true'
         env:
           GH_TOKEN: ${{ secrets.REGISTRATOR_TOKEN }}
           REPOSITORY: ${{ github.repository }}
           SHA: ${{ github.sha }}
           RELEASEFLOW_PROJECT: ${{ inputs.project }}
-          VERSION: ${{ steps.registration.outputs.version || steps.registration-local.outputs.version }}
-          NOTES: ${{ steps.registration.outputs.notes || steps.registration-local.outputs.notes }}
+          VERSION: ${{ needs.registration.outputs.version || needs.registration-local.outputs.version }}
+          NOTES: ${{ needs.registration.outputs.notes || needs.registration-local.outputs.notes }}
         run: |
           set -euo pipefail
           if [ -z "$GH_TOKEN" ]; then
