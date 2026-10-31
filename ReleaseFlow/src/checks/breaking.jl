@@ -68,6 +68,30 @@ function api_removals(settings::Settings, release::LastRelease, directory, name)
     return filter(!isempty, split(output, '\n'))
 end
 
+# The lines that start a failure in the output of Julia's tests.
+const FAILURE_HEADER = r"Test Failed at|Error During Test at|Got exception outside of a @test"
+
+# The failures in the output of Julia's tests, each from its first line, which names the test set, file and line, to its stack trace, which is left out: the expression, and what it evaluated to or the exception it threw.
+# Paths in `directory`, the checkout that the tests ran in, are given relative to it.
+function test_failures(output, directory)
+    failures = Vector{String}[]
+    current = nothing
+    for line in split(output, '\n')
+        if occursin(FAILURE_HEADER, line)
+            current = String[line]
+            push!(failures, current)
+        elseif current !== nothing
+            if isempty(strip(line)) || occursin(r"^\s*Stacktrace:", line) || startswith(line, "Test Summary:")
+                current = nothing
+            else
+                push!(current, line)
+            end
+        end
+    end
+    prefixes = unique([joinpath(directory, ""), joinpath(realpath(directory), "")])
+    return [replace(join(lines, '\n'), (prefix => "" for prefix in prefixes)...) for lines in failures]
+end
+
 # Run the last release's tests against the head: a checkout of the head's commit with the release's `test/` directory.
 # The checkout is of the whole repository, so that tests that read the files around a package in a subdirectory still find them.
 function old_tests(settings::Settings, release_checkout)
@@ -86,10 +110,10 @@ function old_tests(settings::Settings, release_checkout)
         # Without a committed manifest, which Pkg resolves afresh for the head's dependencies.
         foreach(entry -> startswith(entry, "Manifest") && rm(joinpath(directory, entry)), readdir(directory))
         ok, output, errors = julia_in(directory, `-e "using Pkg; Pkg.test()"`)
-        failing = filter(line -> occursin(r"Test Failed at|Error During Test at|Got exception outside of a @test", line), split(output * errors, '\n'))
+        failing = vcat(test_failures(output, head_checkout), test_failures(errors, head_checkout))
         # A failure without failing tests, such as one of Pkg, is reported by the end of its output.
         ok || !isempty(failing) || push!(failing, last(errors, 3000))
-        return ok, join(failing, "\n")
+        return ok, join(failing, "\n\n")
     end
 end
 
