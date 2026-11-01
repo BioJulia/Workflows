@@ -64,7 +64,7 @@ jobs:
         with:
           fetch-depth: 0
       - id: registration
-        uses: BioJulia/Workflows@v1.1.0
+        uses: BioJulia/Workflows@v1.1.1
         with:
           check: registration
           project: ${{ inputs.project }}
@@ -77,14 +77,14 @@ jobs:
     permissions:
       contents: read
     outputs:
-      register: ${{ steps.registration.outputs.register }}
-      version: ${{ steps.registration.outputs.version }}
-      notes: ${{ steps.registration.outputs.notes }}
+      register: ${{ steps.registration-local.outputs.register }}
+      version: ${{ steps.registration-local.outputs.version }}
+      notes: ${{ steps.registration-local.outputs.notes }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
-      - id: registration
+      - id: registration-local
         uses: ./
         with:
           check: registration

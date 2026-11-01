@@ -66,9 +66,10 @@ end
     for (file, key, token) in [("release.yml", "prepare", "push"), ("register.yml", "registration", "register")]
         jobs = workflow_jobs(file)
         @test !any(lines -> any(pinned, lines) && any(checkout, lines), values(jobs))
-        # The job at the checkout is the job at the release, but for its action and its condition.
+        # The job at the checkout is the job at the release, but for its action, its condition, and its step's id, which is its job's key, so that each step's id is unique in the workflow.
         local_job = map(jobs[key]) do line
-            pinned(line) ? replace(line, r"BioJulia/Workflows@\S+" => "./") : replace(line, "if: \${{ !inputs.local-action }}" => "if: \${{ inputs.local-action }}")
+            pinned(line) && return replace(line, r"BioJulia/Workflows@\S+" => "./")
+            return replace(line, "if: \${{ !inputs.local-action }}" => "if: \${{ inputs.local-action }}", "- id: $(key)" => "- id: $(key)-local", "steps.$(key)." => "steps.$(key)-local.")
         end
         @test count(pinned, jobs[key]) == 1
         @test local_job == jobs["$(key)-local"]

@@ -133,7 +133,7 @@ jobs:
           version=$(sed -n 's/^version = "\(.*\)"$/\1/p' "${RELEASEFLOW_PROJECT:+${RELEASEFLOW_PROJECT%/}/}Project.toml")
           git switch --detach "v$version"
       - id: prepare
-        uses: BioJulia/Workflows@v1.1.0
+        uses: BioJulia/Workflows@v1.1.1
         with:
           check: prepare
           model: ${{ inputs.model }}
@@ -161,10 +161,10 @@ jobs:
     permissions:
       contents: read
     outputs:
-      version: ${{ steps.prepare.outputs.version }}
-      branch: ${{ steps.prepare.outputs.branch }}
-      base: ${{ steps.prepare.outputs.base }}
-      notes: ${{ steps.prepare.outputs.notes }}
+      version: ${{ steps.prepare-local.outputs.version }}
+      branch: ${{ steps.prepare-local.outputs.branch }}
+      base: ${{ steps.prepare-local.outputs.base }}
+      notes: ${{ steps.prepare-local.outputs.notes }}
       commit: ${{ steps.changes.outputs.commit }}
       patch: ${{ steps.changes.outputs.patch }}
     steps:
@@ -193,7 +193,7 @@ jobs:
           set -euo pipefail
           version=$(sed -n 's/^version = "\(.*\)"$/\1/p' "${RELEASEFLOW_PROJECT:+${RELEASEFLOW_PROJECT%/}/}Project.toml")
           git switch --detach "v$version"
-      - id: prepare
+      - id: prepare-local
         uses: ./
         with:
           check: prepare
