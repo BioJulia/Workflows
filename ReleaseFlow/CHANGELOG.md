@@ -6,6 +6,10 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Changed
+
+- This repository's `CI.yml` runs on pushes to `master` and `develop` only, not to `release/*` and `hotfix/*` branches, which their pull requests test, nor to tags, which name commits already tested; so a release's commit is tested once, not once for its push and again for its pull request.
+
 ## [1.2.0] - 2026-11-01
 
 ### Added
