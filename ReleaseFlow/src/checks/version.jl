@@ -11,6 +11,9 @@ single_steps(base) = (next_patch(base), next_minor(base), next_major(base))
 # The steps that a breaking change may take from `base`: the next major version, or below 1.0 the next minor version, which Julia's compat treats as breaking.
 breaking_steps(base) = base.major == 0 ? (next_minor(base), next_major(base)) : (next_major(base),)
 
+# The steps that new features may take from `base`: the next minor or major version, or below 1.0 any single step, since Julia's compat treats the next minor version as breaking there, and takes the next patch as a compatible release.
+feature_steps(base) = base.major == 0 ? single_steps(base) : (next_minor(base), next_major(base))
+
 # A release or hotfix branch's name gives its version; trunk names no versions.
 check_name(settings::Settings, branch::Branch, head) = unnamed(settings, branch, head)
 
@@ -40,6 +43,30 @@ function check_step(settings::Settings, ::Branch{Hotfix}, head, release::LastRel
     head == next_patch(base) || failure(settings, "Version", "A hotfix releases the next patch, $(next_patch(base)), not $(head).")
     return
 end
+
+# The number of entries under `### Added` in the section of `version` of the head's changelog; none where there's no changelog or no such section, which the changelog checks report.
+function added_entries(settings::Settings, version)
+    path = joinpath(package_directory(settings), "CHANGELOG.md")
+    isfile(path) || return 0
+    parsed = sections(read(path, String))
+    index = findfirst(section -> is_version(section, version), parsed)
+    return index === nothing ? 0 : subsection_entries(parsed[index], "Added")
+end
+
+# New features take a feature step, which a hotfix can't; a version that isn't a single step fails `check_step` already.
+function check_features(settings::Settings, ::Branch, head, release::LastRelease)
+    base = release.version
+    head in single_steps(base) || return
+    head in feature_steps(base) || added_entries(settings, head) == 0 || failure(settings, "Version", "The section of $(head) in $(package_path(settings, "CHANGELOG.md")) has `### Added` entries, whose new features take the next minor version, $(next_minor(base)), or a major one, not the patch $(head).")
+    return
+end
+
+function check_features(settings::Settings, branch::Branch{Hotfix}, head, ::LastRelease)
+    added_entries(settings, head) == 0 || failure(settings, "Version", "The hotfix $(branch.name) has `### Added` entries in the section of $(head) in $(package_path(settings, "CHANGELOG.md")), but a hotfix may not add features; release them from a release branch.")
+    return
+end
+
+check_features(::Settings, ::Branch, head, ::InitialRelease) = nothing
 
 # An initial release takes a standard first version, as General accepts for a new package: 0.0.1, 0.1.0, or a major version, X.0.0.
 is_first_version(version) = version == v"0.0.1" || version == v"0.1.0" || (version.major >= 1 && version.minor == 0 && version.patch == 0)
@@ -85,6 +112,8 @@ function check(::VersionCheck, settings::Settings)
     has_tag(settings, tag) && package_tree(settings, tag) != head_tree && failure(settings, "Version", "The version $(head) is already tagged, $(tag), at another commit; a release takes a new version.")
 
     # Finding the last release checks that its tag agrees with the registry.
-    check_step(settings, branch, head, last_release(settings))
+    release = last_release(settings)
+    check_step(settings, branch, head, release)
+    check_features(settings, branch, head, release)
     return
 end

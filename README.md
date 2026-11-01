@@ -158,7 +158,8 @@ jobs:
 
 A commit whose version the registry already records has nothing to register, so a push that releases nothing does nothing.
 A package's first release is registered by hand, since the registry reviews a new package before it merges: where the registry doesn't know the package, the workflow doesn't comment, and its warning and job summary give the comment to make, `@JuliaRegistrator register`, and the commit to make it on; once the registry merges the first release, after its waiting period for new packages, the workflow registers later releases by itself.
-Registrator acts on comments from the repository's collaborators and its organization's members, which an app's bot isn't, and from `github-actions[bot]`, so the workflow comments with its own `GITHUB_TOKEN`, which needs the permission `contents: write` that the caller grants; where it's given, the secret `REGISTRATOR_TOKEN` comments instead, as described in [The Registrator token](#the-registrator-token). TagBot then tags the release once the registry merges it.
+Registrator acts on comments from the repository's collaborators and its organization's members, which an app's bot isn't, and from `github-actions[bot]`, so the workflow comments with its own `GITHUB_TOKEN`, which needs the permission `contents: write` that the caller grants; where it's given, the secret `REGISTRATOR_TOKEN` comments instead, as described in [The Registrator token](#the-registrator-token).
+TagBot then tags the release once the registry merges it.
 
 OneFlow and trunk, in `.github/workflows/OneFlow.yml` or `.github/workflows/Trunk.yml`:
 
@@ -325,6 +326,7 @@ GitHub shows the token's owner as the author of the branches and pull requests, 
   - Gitflow and OneFlow: a hotfix carries no unreleased work, as it branches from what's released, and a release carries the unreleased work, as it branches from where that is.
     Git doesn't record which branch a branch was made from, so these rules look at the commits: where the head last met the branch of unreleased work, `develop` or the main branch, must be released for a hotfix, and not yet released for a release.
 - **Version.** `Project.toml`'s version is a single step up from the last release's, without a prerelease or build suffix, and the next patch for a hotfix.
+  A version whose section has `### Added` entries takes the next minor or major version, from 1.0, since below 1.0 Julia's compat takes the next patch as a compatible release; and a hotfix's section has none, since a hotfix adds no features.
   For gitflow and OneFlow, the branch's name gives the same version.
   The version isn't yet registered or tagged, except at the head commit, as OneFlow registers a release before it merges back.
 - **Changelog.** `CHANGELOG.md` has a section for the version, `## [X.Y.Z]`, with entries, before every earlier version's, with nothing left under `## [Unreleased]`.
@@ -384,4 +386,5 @@ Every package that calls the workflows runs what their tags point to, so:
 The repository's own pull requests are checked by the released checks, since `Self-Gitflow.yml` calls `gitflow.yml` at the major tag, `v1`, while CI tests the pull request's own.
 A release's pull request sets the workflows' calls of the action to its own tag, which only exists once it merges, so its checks are those of the release before it.
 So the first release, `v1.0.0`, can't be checked before it's tagged: require the Gitflow checks in the rulesets of `master` and `develop` once it is.
-Preparing and registering a release can't use the released action, though: a release may be the first with a check that they call, and its own tag only exists once it's registered. So `Self-Release.yml` and `Self-Register.yml` call this commit's `release.yml` and `register.yml` with `local-action: true`, which run the action from the checked-out commit, in a job of its own; GitHub resolves every action of a job before it runs, even one whose step is skipped, so the job at the release, which names the tag that doesn't exist yet, is skipped whole.
+Preparing and registering a release can't use the released action, though: a release may be the first with a check that they call, and its own tag only exists once it's registered.
+So `Self-Release.yml` and `Self-Register.yml` call this commit's `release.yml` and `register.yml` with `local-action: true`, which run the action from the checked-out commit, in a job of its own; GitHub resolves every action of a job before it runs, even one whose step is skipped, so the job at the release, which names the tag that doesn't exist yet, is skipped whole.
