@@ -31,6 +31,10 @@ on:
     branches: [main, develop]
     # Adding or removing the `skip changelog` label runs the checks again.
     types: [opened, synchronize, reopened, labeled, unlabeled]
+# A new push, or a change of the labels, cancels the run that's still checking the pull request.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
 permissions: {}
 jobs:
   gitflow:
@@ -38,6 +42,9 @@ jobs:
     permissions:
       contents: read
 ```
+
+The concurrency group lets only the newest run check a pull request, so that a force-push or a new commit doesn't leave the run of the outdated commit going.
+The workflows that run on pushes, such as the back-merge and the register workflow below, take none, since cancelling one partway could leave a release half made.
 
 And the back-merge, in `.github/workflows/BackMerge.yml`, which opens the pull request that brings a release or hotfix back into `develop`:
 
@@ -169,6 +176,9 @@ on:
   pull_request:
     branches: [main]
     types: [opened, synchronize, reopened, labeled, unlabeled]
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
 permissions: {}
 jobs:
   oneflow:
