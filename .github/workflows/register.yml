@@ -118,12 +118,12 @@ jobs:
           $NOTES"
           fi
           # Where the comment can't be made, what the token needs, and the comment to make by hand meanwhile.
-          if [ "$TOKEN" = GITHUB_TOKEN ]; then
-            needs="Commenting on a commit needs the permission contents: write, which the caller's job that uses register.yml grants."
-          else
-            needs="REGISTRATOR_TOKEN must be a token of an account with write access to $REPOSITORY, with the repository permission Contents: Read and write; without it, the workflow comments with GITHUB_TOKEN, as github-actions[bot], whose comments Registrator acts on."
-          fi
           fail() {
+            if [ "$TOKEN" = GITHUB_TOKEN ]; then
+              needs="Commenting on a commit needs the permission contents: write, which the caller's job that uses register.yml grants."
+            else
+              needs="REGISTRATOR_TOKEN must be a token of an account with write access to $REPOSITORY, with the repository permission Contents: Read and write; without it, the workflow comments with GITHUB_TOKEN, as github-actions[bot], whose comments Registrator acts on."
+            fi
             echo "::error title=Register::$1 $needs Meanwhile, comment \`$command\` on $SHA by hand; see the job summary."
             {
               echo "## Register $VERSION"
