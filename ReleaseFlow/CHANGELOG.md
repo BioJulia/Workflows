@@ -6,9 +6,14 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Added
+
+- The version check fails a release whose section has `### Added` entries with the next patch, from 1.0, where new features take the next minor or major version, and a hotfix whose section has any, since a hotfix adds no features; before, only `prepare`'s step `auto` read them.
+
 ### Changed
 
-- `register.yml` comments for Registrator with the workflow's `GITHUB_TOKEN`, as `github-actions[bot]`, whose comments Registrator acts on, so it needs no machine user: its caller grants `contents: write`, and `REGISTRATOR_TOKEN`, now optional, comments instead where it's given. Where GitHub refuses the comment, the error gives GitHub's message and what the token needs, and the job summary gives the comment to make by hand meanwhile.
+- `register.yml` comments for Registrator with the workflow's `GITHUB_TOKEN`, as `github-actions[bot]`, whose comments Registrator acts on, so it needs no machine user: its caller grants `contents: write`, and `REGISTRATOR_TOKEN`, now optional, comments instead where it's given.
+  Where GitHub refuses the comment, the error gives GitHub's message and what the token needs, and the job summary gives the comment to make by hand meanwhile.
 
 ## [1.1.1] - 2026-10-31
 
@@ -19,7 +24,8 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 ### Fixed
 
 - The checks' messages name the changelog by its path in the repository, such as `ReleaseFlow/CHANGELOG.md` for a package in a subdirectory, rather than `CHANGELOG.md`.
-- `release.yml` and `register.yml` run the action at its release, and with `local-action` at the checkout, in jobs of their own, since GitHub resolves every action of a job before it runs, even one whose step is skipped; so `Self-Register.yml` no longer fails where a release merges, whose own tag doesn't exist until it's registered. The jobs that run the action no longer have the tokens: `release.yml`'s `Push` job applies the changes that its `Prepare` job passes on, and pushes them, and `register.yml`'s `Register` job, after its `Registration` job, comments, and only runs where there's a version to register.
+- `release.yml` and `register.yml` run the action at its release, and with `local-action` at the checkout, in jobs of their own, since GitHub resolves every action of a job before it runs, even one whose step is skipped; so `Self-Register.yml` no longer fails where a release merges, whose own tag doesn't exist until it's registered.
+  The jobs that run the action no longer have the tokens: `release.yml`'s `Push` job applies the changes that its `Prepare` job passes on, and pushes them, and `register.yml`'s `Register` job, after its `Registration` job, comments, and only runs where there's a version to register.
 
 ## [1.1.0] - 2026-10-29
 
