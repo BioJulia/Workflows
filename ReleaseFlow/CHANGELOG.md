@@ -6,6 +6,8 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-11-01
+
 ### Added
 
 - The version check fails a release whose section has `### Added` entries with the next patch, from 1.0, where new features take the next minor or major version, and a hotfix whose section has any, since a hotfix adds no features; before, only `prepare`'s step `auto` read them.
@@ -69,7 +71,8 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - The back-merge workflow opens its pull request with a GitHub App's token, from the secrets `RELEASEFLOW_APP_CLIENT_ID` and `RELEASEFLOW_APP_PRIVATE_KEY`, in preference to `RELEASEFLOW_TOKEN`; the README explains how to create the app.
 - The back-merge workflow creates its branch with the job's own token, so the app or personal token needs only read and write access to pull requests; where GitHub refuses the job's token the branch, the other token creates it, with access to contents and workflows.
 
-[Unreleased]: https://github.com/BioJulia/Workflows/compare/v1.1.1...HEAD
+[Unreleased]: https://github.com/BioJulia/Workflows/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/BioJulia/Workflows/compare/v1.1.1...v1.2.0
 [1.1.1]: https://github.com/BioJulia/Workflows/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/BioJulia/Workflows/compare/v1.0.1...v1.1.0
 [1.0.1]: https://github.com/BioJulia/Workflows/compare/v1.0.0...v1.0.1
