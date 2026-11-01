@@ -14,6 +14,7 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 - `register.yml` comments for Registrator with the workflow's `GITHUB_TOKEN`, as `github-actions[bot]`, whose comments Registrator acts on, so it needs no machine user: its caller grants `contents: write`, and `REGISTRATOR_TOKEN`, now optional, comments instead where it's given.
   Where GitHub refuses the comment, the error gives GitHub's message and what the token needs, and the job summary gives the comment to make by hand meanwhile.
+- The README's callers of `gitflow.yml`, `oneflow.yml` and `trunk.yml` take a concurrency group, so that a pull request's new push cancels the run of its outdated commit, as this repository's `CI.yml` and `Self-Gitflow.yml` now do; `CI.yml`'s runs on pushes to a branch or a tag still run to the end.
 
 ## [1.1.1] - 2026-10-31
 
