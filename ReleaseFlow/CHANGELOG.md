@@ -6,6 +6,10 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Changed
+
+- `register.yml` comments for Registrator with the workflow's `GITHUB_TOKEN`, as `github-actions[bot]`, whose comments Registrator acts on, so it needs no machine user: its caller grants `contents: write`, and `REGISTRATOR_TOKEN`, now optional, comments instead where it's given. Where GitHub refuses the comment, the error gives GitHub's message and what the token needs, and the job summary gives the comment to make by hand meanwhile.
+
 ## [1.1.1] - 2026-10-31
 
 ### Changed
