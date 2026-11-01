@@ -99,8 +99,8 @@ jobs:
     steps:
       - name: Comment for Registrator
         env:
-          GH_TOKEN: ${{ secrets.REGISTRATOR_TOKEN || github.token }}
-          TOKEN: ${{ secrets.REGISTRATOR_TOKEN != '' && 'REGISTRATOR_TOKEN' || 'GITHUB_TOKEN' }}
+          GH_TOKEN: ${{ secrets.REGISTRATOR_TOKEN }}
+          WORKFLOW_TOKEN: ${{ github.token }}
           REPOSITORY: ${{ github.repository }}
           SHA: ${{ github.sha }}
           RELEASEFLOW_PROJECT: ${{ inputs.project }}
@@ -108,6 +108,16 @@ jobs:
           NOTES: ${{ needs.registration.outputs.notes || needs.registration-local.outputs.notes }}
         run: |
           set -euo pipefail
+          # REGISTRATOR_TOKEN comments where it's given, and the workflow's GITHUB_TOKEN otherwise.
+          if [ -n "$GH_TOKEN" ]; then
+            token=REGISTRATOR_TOKEN
+          elif [ -n "${WORKFLOW_TOKEN:-}" ]; then
+            token=GITHUB_TOKEN
+            export GH_TOKEN="$WORKFLOW_TOKEN"
+          else
+            echo "::error title=Register::Registering $VERSION needs REGISTRATOR_TOKEN or the workflow's GITHUB_TOKEN, and the step was given neither."
+            exit 1
+          fi
           command="@JuliaRegistrator register${RELEASEFLOW_PROJECT:+ subdir=${RELEASEFLOW_PROJECT%/}}"
           body="$command"
           if [ -n "$NOTES" ]; then
@@ -119,7 +129,7 @@ jobs:
           fi
           # Where the comment can't be made, what the token needs, and the comment to make by hand meanwhile.
           fail() {
-            if [ "$TOKEN" = GITHUB_TOKEN ]; then
+            if [ "$token" = GITHUB_TOKEN ]; then
               needs="Commenting on a commit needs the permission contents: write, which the caller's job that uses register.yml grants."
             else
               needs="REGISTRATOR_TOKEN must be a token of an account with write access to $REPOSITORY, with the repository permission Contents: Read and write; without it, the workflow comments with GITHUB_TOKEN, as github-actions[bot], whose comments Registrator acts on."
@@ -139,5 +149,5 @@ jobs:
             exit 1
           }
           errors=$(mktemp)
-          gh api "repos/$REPOSITORY/commits/$SHA/comments" -f body="$body" --jq .html_url 2> "$errors" || fail "$TOKEN couldn't comment on $SHA, for $VERSION: $(tr '\n' ' ' < "$errors")"
+          gh api "repos/$REPOSITORY/commits/$SHA/comments" -f body="$body" --jq .html_url 2> "$errors" || fail "$token couldn't comment on $SHA, for $VERSION: $(tr '\n' ' ' < "$errors")"
           echo "Commented \`$command\` on $SHA, for $VERSION."
