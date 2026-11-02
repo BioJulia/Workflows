@@ -40,4 +40,8 @@ const LIB_TESTS = TESTS * "@test isfile(joinpath(@__DIR__, \"..\", \"..\", \"..\
     commit!(directory, "Release 0.1.1", in_lib("Project.toml" => project("0.1.1"), "src/Toy.jl" => replace(SOURCE, "triple(x) = 3x" => ""), "CHANGELOG.md" => changelog(released = ["0.1.1" => ["A feature."], "0.1.0" => ["First."]]))...)
     @test fails(on("release/v0.1.1", "breaking"), "must be 0.2.0 or 1.0.0, not 0.1.1")
     @test fails(on("release/v0.1.1", "breaking"), "the section of 0.1.1 in lib/Toy/CHANGELOG.md needs a `### Breaking` subsection")
+    # A retired test is given by its path in the package's directory.
+    branch!(directory, "release/v0.1.1", feature)
+    commit!(directory, "Release 0.1.1", in_lib("Project.toml" => project("0.1.1"), "src/Toy.jl" => replace(SOURCE, "3x" => "3x + 1"), "test/Retired.toml" => "[\"0.1.0\"]\n\"test/runtests.jl:4\" = \"It tested the old `triple`.\"\n", "CHANGELOG.md" => changelog(released = ["0.1.1" => ["A feature."], "0.1.0" => ["First."]]))...)
+    @test passes(on("release/v0.1.1", "breaking"))
 end

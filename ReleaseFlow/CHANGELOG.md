@@ -9,6 +9,7 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 ### Added
 
 - The changelog entry check compares the public API of a pull request that changes the package's `src/` or `Project.toml` with its base's, and needs a new entry under `### Breaking` where it removes or changes any, and under `### Added` where it adds any, so that the release takes the right version from its pull requests' entries, rather than the breaking check finding a breaking change only at the release.
+- The breaking check doesn't count the failures of the last release's tests that the head's `test/Retired.toml` retires, by their path and line under the release's version, with a reason that the job's summary lists, so that a test of internals that the head changes, which the tagged release can't drop, doesn't make the change breaking.
 
 ### Changed
 

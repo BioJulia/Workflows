@@ -116,8 +116,61 @@ function old_tests(settings::Settings, release_checkout)
         failing = vcat(test_failures(output, head_checkout), test_failures(errors, head_checkout))
         # A failure without failing tests, such as one of Pkg, is reported by the end of its output.
         ok || !isempty(failing) || push!(failing, last(errors, 3000))
-        return ok, join(failing, "\n\n")
+        return ok, failing
     end
+end
+
+# The file of the head's package that retires tests of earlier releases, whose failures then don't count.
+const RETIRED = joinpath("test", "Retired.toml")
+
+# The path and line of a failure, in the repository, from its first line; `nothing` for one without, such as an exception outside a `@test`.
+function failure_location(failure)
+    found = match(r"(?:Test Failed|Error During Test) at (.+):(\d+)$", first(split(failure, '\n')))
+    return found === nothing ? nothing : (found[1], parse(Int, found[2]))
+end
+
+# Whether the entry `key` of the retired tests, a path in the package with an optional line, such as `test/register.jl:69`, retires a failure at `location`.
+function retires(settings::Settings, key, location)
+    location === nothing && return false
+    found = match(r"^(.+?)(?::(\d+))?$", key)
+    path, line = found[1], found[2]
+    return package_path(settings, path) == location[1] && (line === nothing || parse(Int, line) == location[2])
+end
+
+# The head's retired tests of `release`, as entries and their reasons, warning of the tables of other releases, which no longer apply.
+function retired_tests(settings::Settings, release::LastRelease)
+    path = joinpath(package_directory(settings), RETIRED)
+    isfile(path) || return Pair{String, String}[]
+    tables = try
+        TOML.parsefile(path)
+    catch error
+        failure(settings, "Breaking changes", "$(package_path(settings, RETIRED)) isn't valid TOML: $(sprint(showerror, error))")
+        return Pair{String, String}[]
+    end
+    for version in sort(collect(keys(tables)))
+        version == string(release.version) || warning("Breaking changes", "$(package_path(settings, RETIRED)) retires tests of $(version), which isn't the last release, $(release.version), so they no longer apply; remove them.")
+    end
+    entries = get(tables, string(release.version), Dict())
+    if !(entries isa AbstractDict && all(reason -> reason isa String, values(entries)))
+        failure(settings, "Breaking changes", "The table `[\"$(release.version)\"]` of $(package_path(settings, RETIRED)) must give each retired test, such as `\"test/runtests.jl:4\"`, its reason as a string.")
+        return Pair{String, String}[]
+    end
+    return sort([key => reason for (key, reason) in entries])
+end
+
+# The failures that the entries retire, with the entry of each, and those they don't; warning of entries that retire none, such as a test that no longer fails.
+function retire(settings::Settings, entries, failures)
+    retired = Pair{String, String}[]
+    remaining = String[]
+    for failure in failures
+        location = failure_location(failure)
+        index = findfirst(((key, _),) -> retires(settings, key, location), entries)
+        index === nothing ? push!(remaining, failure) : push!(retired, first(entries[index]) => failure)
+    end
+    for (key, _) in entries
+        any(((used, _),) -> used == key, retired) || warning("Breaking changes", "$(package_path(settings, RETIRED)) retires $(key), but no test there fails; remove it.")
+    end
+    return retired, remaining
 end
 
 # A breaking change takes a breaking version, which a hotfix can't.
@@ -136,9 +189,13 @@ function check_breaking(settings::Settings, release::LastRelease)
     head = head_version(settings)
     name = head_project(settings)["name"]
     narrowed, widened = compat_changes(TOML.parse(file_at(settings, release.ref, package_path(settings, "Project.toml"))), head_project(settings))
-    removed, (tests_pass, failing) = with_checkout(settings, release.ref) do directory
+    removed, (tests_ok, failures) = with_checkout(settings, release.ref) do directory
         api_removals(settings, release, directory, name), old_tests(settings, directory)
     end
+    entries = retired_tests(settings, release)
+    retired, failing = retire(settings, entries, failures)
+    # A failure without a location, such as one of Pkg, can't be retired, so the tests pass where every failure is retired.
+    tests_pass = tests_ok || isempty(failing)
 
     base = label(release)
     report = ["## Breaking changes from $(release.version) to $(head)", ""]
@@ -155,7 +212,14 @@ function check_breaking(settings::Settings, release::LastRelease)
     end
     isempty(widened) || push!(report, "", "Other changes to compat bounds, which aren't breaking:", "", "```", widened..., "```")
     push!(report, "")
-    push!(report, tests_pass ? "The tests of $(base) pass." : "The tests of $(base) fail against $(head_label(settings)):\n\n```\n$(failing)\n```")
+    push!(report, tests_pass ? "The tests of $(base) pass." : "The tests of $(base) fail against $(head_label(settings)):\n\n```\n$(join(failing, "\n\n"))\n```")
+    if !isempty(retired)
+        push!(report, "", "The tests of $(base) that $(package_path(settings, RETIRED)) retires, whose failures don't count:", "")
+        for (key, reason) in entries
+            any(((used, _),) -> used == key, retired) && push!(report, "- `$(key)`: $(reason)")
+        end
+        push!(report, "", "```", join(last.(retired), "\n\n"), "```")
+    end
     summary(settings, join(report, '\n'))
     println(join(report, '\n'))
     isempty(removed) && tests_pass && isempty(narrowed) && return
