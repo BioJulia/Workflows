@@ -6,6 +6,18 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-11-01
+
+### Added
+
+- The version check fails a release whose section has `### Added` entries with the next patch, from 1.0, where new features take the next minor or major version, and a hotfix whose section has any, since a hotfix adds no features; before, only `prepare`'s step `auto` read them.
+
+### Changed
+
+- `register.yml` comments for Registrator with the workflow's `GITHUB_TOKEN`, as `github-actions[bot]`, whose comments Registrator acts on, so it needs no machine user: its caller grants `contents: write`, and `REGISTRATOR_TOKEN`, now optional, comments instead where it's given.
+  Where GitHub refuses the comment, the error gives GitHub's message and what the token needs, and the job summary gives the comment to make by hand meanwhile.
+- The README's callers of `gitflow.yml`, `oneflow.yml` and `trunk.yml` take a concurrency group, so that a pull request's new push cancels the run of its outdated commit, as this repository's `CI.yml` and `Self-Gitflow.yml` now do; `CI.yml`'s runs on pushes to a branch or a tag still run to the end.
+
 ## [1.1.1] - 2026-10-31
 
 ### Changed
@@ -15,7 +27,8 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 ### Fixed
 
 - The checks' messages name the changelog by its path in the repository, such as `ReleaseFlow/CHANGELOG.md` for a package in a subdirectory, rather than `CHANGELOG.md`.
-- `release.yml` and `register.yml` run the action at its release, and with `local-action` at the checkout, in jobs of their own, since GitHub resolves every action of a job before it runs, even one whose step is skipped; so `Self-Register.yml` no longer fails where a release merges, whose own tag doesn't exist until it's registered. The jobs that run the action no longer have the tokens: `release.yml`'s `Push` job applies the changes that its `Prepare` job passes on, and pushes them, and `register.yml`'s `Register` job, after its `Registration` job, comments, and only runs where there's a version to register.
+- `release.yml` and `register.yml` run the action at its release, and with `local-action` at the checkout, in jobs of their own, since GitHub resolves every action of a job before it runs, even one whose step is skipped; so `Self-Register.yml` no longer fails where a release merges, whose own tag doesn't exist until it's registered.
+  The jobs that run the action no longer have the tokens: `release.yml`'s `Push` job applies the changes that its `Prepare` job passes on, and pushes them, and `register.yml`'s `Register` job, after its `Registration` job, comments, and only runs where there's a version to register.
 
 ## [1.1.0] - 2026-10-29
 
@@ -58,7 +71,8 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - The back-merge workflow opens its pull request with a GitHub App's token, from the secrets `RELEASEFLOW_APP_CLIENT_ID` and `RELEASEFLOW_APP_PRIVATE_KEY`, in preference to `RELEASEFLOW_TOKEN`; the README explains how to create the app.
 - The back-merge workflow creates its branch with the job's own token, so the app or personal token needs only read and write access to pull requests; where GitHub refuses the job's token the branch, the other token creates it, with access to contents and workflows.
 
-[Unreleased]: https://github.com/BioJulia/Workflows/compare/v1.1.1...HEAD
+[Unreleased]: https://github.com/BioJulia/Workflows/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/BioJulia/Workflows/compare/v1.1.1...v1.2.0
 [1.1.1]: https://github.com/BioJulia/Workflows/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/BioJulia/Workflows/compare/v1.0.1...v1.1.0
 [1.0.1]: https://github.com/BioJulia/Workflows/compare/v1.0.0...v1.0.1

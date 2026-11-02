@@ -31,6 +31,10 @@ on:
     branches: [main, develop]
     # Adding or removing the `skip changelog` label runs the checks again.
     types: [opened, synchronize, reopened, labeled, unlabeled]
+# A new push, or a change of the labels, cancels the run that's still checking the pull request.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
 permissions: {}
 jobs:
   gitflow:
@@ -38,6 +42,9 @@ jobs:
     permissions:
       contents: read
 ```
+
+The concurrency group lets only the newest run check a pull request, so that a force-push or a new commit doesn't leave the run of the outdated commit going.
+The workflows that run on pushes, such as the back-merge and the register workflow below, take none, since cancelling one partway could leave a release half made.
 
 And the back-merge, in `.github/workflows/BackMerge.yml`, which opens the pull request that brings a release or hotfix back into `develop`:
 
@@ -153,14 +160,13 @@ jobs:
   register:
     uses: BioJulia/Workflows/.github/workflows/register.yml@v1
     permissions:
-      contents: read
-    secrets:
-      REGISTRATOR_TOKEN: ${{ secrets.REGISTRATOR_TOKEN }}
+      contents: write
 ```
 
 A commit whose version the registry already records has nothing to register, so a push that releases nothing does nothing.
 A package's first release is registered by hand, since the registry reviews a new package before it merges: where the registry doesn't know the package, the workflow doesn't comment, and its warning and job summary give the comment to make, `@JuliaRegistrator register`, and the commit to make it on; once the registry merges the first release, after its waiting period for new packages, the workflow registers later releases by itself.
-Registrator only acts on comments from accounts with write access, which an app's bot isn't, so the comment takes a machine user's token, as described in [The Registrator token](#the-registrator-token); TagBot then tags the release once the registry merges it.
+Registrator acts on comments from the repository's collaborators and its organization's members, which an app's bot isn't, and from `github-actions[bot]`, so the workflow comments with its own `GITHUB_TOKEN`, which needs the permission `contents: write` that the caller grants; where it's given, the secret `REGISTRATOR_TOKEN` comments instead, as described in [The Registrator token](#the-registrator-token).
+TagBot then tags the release once the registry merges it.
 
 OneFlow and trunk, in `.github/workflows/OneFlow.yml` or `.github/workflows/Trunk.yml`:
 
@@ -170,6 +176,9 @@ on:
   pull_request:
     branches: [main]
     types: [opened, synchronize, reopened, labeled, unlabeled]
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
 permissions: {}
 jobs:
   oneflow:
@@ -299,12 +308,13 @@ To check it, run the caller's Release workflow from the Actions tab: it pushes `
 
 ### The Registrator token
 
-Registrator acts on a comment `@JuliaRegistrator register` only from an account with write access to the repository, so the register workflow comments with a fine-grained personal access token of a machine user, an account that the maintainers share, such as a bot account of the organization.
+The register workflow comments with its own `GITHUB_TOKEN`, as `github-actions[bot]`, so it needs no secret.
+Where the comment should come from another account, such as a machine user that the maintainers share, the secret `REGISTRATOR_TOKEN`, a fine-grained personal access token of that account, comments instead:
 
-1. Give the machine user write access to the repositories that use the register workflow, through a team of the organization.
-2. Signed in as the machine user, open Settings → Developer settings → Personal access tokens → Fine-grained tokens, and choose "Generate new token", named such as `REGISTRATOR_TOKEN for <organization>`, with the organization as its resource owner, and an expiration.
+1. Give the account write access to the repositories that use the register workflow, through a team of the organization.
+2. Signed in as the account, open Settings → Developer settings → Personal access tokens → Fine-grained tokens, and choose "Generate new token", named such as `REGISTRATOR_TOKEN for <organization>`, with the organization as its resource owner, and an expiration.
 3. Under repository access, choose "Only select repositories", with those repositories, and under repository permissions, set Contents to Read and write, which commenting on a commit needs.
-4. Store it as an environment secret named `REGISTRATOR_TOKEN`, in each repository's `releaseflow` environment.
+4. Store it as an environment secret named `REGISTRATOR_TOKEN`, in each repository's `releaseflow` environment, and pass it to the register workflow with `secrets: { REGISTRATOR_TOKEN: ${{ secrets.REGISTRATOR_TOKEN }} }`.
 
 ### Creating the ReleaseFlow token
 
@@ -326,6 +336,7 @@ GitHub shows the token's owner as the author of the branches and pull requests, 
   - Gitflow and OneFlow: a hotfix carries no unreleased work, as it branches from what's released, and a release carries the unreleased work, as it branches from where that is.
     Git doesn't record which branch a branch was made from, so these rules look at the commits: where the head last met the branch of unreleased work, `develop` or the main branch, must be released for a hotfix, and not yet released for a release.
 - **Version.** `Project.toml`'s version is a single step up from the last release's, without a prerelease or build suffix, and the next patch for a hotfix.
+  A version whose section has `### Added` entries takes the next minor or major version, from 1.0, since below 1.0 Julia's compat takes the next patch as a compatible release; and a hotfix's section has none, since a hotfix adds no features.
   For gitflow and OneFlow, the branch's name gives the same version.
   The version isn't yet registered or tagged, except at the head commit, as OneFlow registers a release before it merges back.
 - **Changelog.** `CHANGELOG.md` has a section for the version, `## [X.Y.Z]`, with entries, before every earlier version's, with nothing left under `## [Unreleased]`.
@@ -385,4 +396,5 @@ Every package that calls the workflows runs what their tags point to, so:
 The repository's own pull requests are checked by the released checks, since `Self-Gitflow.yml` calls `gitflow.yml` at the major tag, `v1`, while CI tests the pull request's own.
 A release's pull request sets the workflows' calls of the action to its own tag, which only exists once it merges, so its checks are those of the release before it.
 So the first release, `v1.0.0`, can't be checked before it's tagged: require the Gitflow checks in the rulesets of `master` and `develop` once it is.
-Preparing and registering a release can't use the released action, though: a release may be the first with a check that they call, and its own tag only exists once it's registered. So `Self-Release.yml` and `Self-Register.yml` call this commit's `release.yml` and `register.yml` with `local-action: true`, which run the action from the checked-out commit, in a job of its own; GitHub resolves every action of a job before it runs, even one whose step is skipped, so the job at the release, which names the tag that doesn't exist yet, is skipped whole.
+Preparing and registering a release can't use the released action, though: a release may be the first with a check that they call, and its own tag only exists once it's registered.
+So `Self-Release.yml` and `Self-Register.yml` call this commit's `release.yml` and `register.yml` with `local-action: true`, which run the action from the checked-out commit, in a job of its own; GitHub resolves every action of a job before it runs, even one whose step is skipped, so the job at the release, which names the tag that doesn't exist yet, is skipped whole.

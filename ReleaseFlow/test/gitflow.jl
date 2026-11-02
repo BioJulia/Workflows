@@ -52,6 +52,34 @@ end
         @test fails(on("release/v0.2.0"), "already has the version tags v0.1.0")
     end
 
+    # `### Added` takes the next minor version from 1.0, and no hotfix.
+    @testset "features" begin
+        added(version, base) = replace(changelog(released = [version => ["A feature."], base => ["First."]]), "## [$(version)]\n\n" => "## [$(version)]\n\n### Added\n\n")
+        directory, released, feature = gitflow_repository()
+        on(name) = (git(directory, "checkout", "-q", name); check(directory, "version"; RELEASEFLOW_HEAD_REF = name, RELEASEFLOW_HEAD_SHA = name))
+        # Below 1.0, the next patch is a compatible release, which may add features.
+        release!(directory, "release/v0.1.1", feature, "0.1.1"; log = added("0.1.1", "0.1.0"))
+        @test passes(on("release/v0.1.1"))
+        release!(directory, "hotfix/v0.1.1", released, "0.1.1"; log = added("0.1.1", "0.1.0"))
+        @test fails(on("hotfix/v0.1.1"), "The hotfix hotfix/v0.1.1 has `### Added` entries in the section of 0.1.1 in CHANGELOG.md, but a hotfix may not add features")
+        # From 1.0, they take the next minor or major version.
+        directory = repository(; branch = "master")
+        released = commit!(directory, "Release 1.0.0", "Project.toml" => project("1.0.0"), "src/Toy.jl" => SOURCE, "test/runtests.jl" => TESTS, "CHANGELOG.md" => changelog(released = ["1.0.0" => ["First."]]))
+        git(directory, "tag", "v1.0.0")
+        origin!(directory, "master", released)
+        origin!(directory, "develop", released)
+        for (version, outcome) in ["1.0.1" => false, "1.1.0" => true, "2.0.0" => true]
+            branch!(directory, "release/v$(version)", released)
+            commit!(directory, "Release $(version)", "Project.toml" => project(version), "CHANGELOG.md" => added(version, "1.0.0"))
+            result = on("release/v$(version)")
+            @test outcome ? passes(result) : fails(result, "has `### Added` entries, whose new features take the next minor version, 1.1.0, or a major one, not the patch 1.0.1")
+        end
+        # A patch of fixes alone is a release like any other.
+        branch!(directory, "release/v1.0.1", released)
+        commit!(directory, "Release 1.0.1", "Project.toml" => project("1.0.1"), "CHANGELOG.md" => changelog(released = ["1.0.1" => ["A fix."], "1.0.0" => ["First."]]))
+        @test passes(on("release/v1.0.1"))
+    end
+
     @testset "changelog" begin
         directory, released, feature = gitflow_repository()
         on(name; variables...) = check(directory, "changelog"; RELEASEFLOW_HEAD_REF = name, variables...)
