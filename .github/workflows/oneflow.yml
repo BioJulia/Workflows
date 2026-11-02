@@ -115,7 +115,10 @@ jobs:
       - uses: julia-actions/setup-julia@da908477b5db94c10ffce8cfea9f2b3b9d5db687 # v3.0.3
         with:
           version: '1'
+      # Deleting the older caches needs actions: write, which the job lacks, so they're left to GitHub, which evicts them once the repository's caches reach its limit.
       - uses: julia-actions/cache@9353db09a0f2bbbdec6f41791918c75d37391b36 # v3.5.0
+        with:
+          delete-old-caches: false
       - uses: BioJulia/Workflows@v1.2.0
         with:
           check: breaking
@@ -137,7 +140,10 @@ jobs:
       - uses: julia-actions/setup-julia@da908477b5db94c10ffce8cfea9f2b3b9d5db687 # v3.0.3
         with:
           version: '1'
+      # Deleting the older caches needs actions: write, which the job lacks, so they're left to GitHub, which evicts them once the repository's caches reach its limit.
       - uses: julia-actions/cache@9353db09a0f2bbbdec6f41791918c75d37391b36 # v3.5.0
+        with:
+          delete-old-caches: false
       # Checks for a new entry under `## [Unreleased]`, and where the source changes, compares the public API with the base's: removed or changed API needs an entry under `### Breaking`, and added API one under `### Added`.
       - uses: BioJulia/Workflows@v1.2.0
         with:

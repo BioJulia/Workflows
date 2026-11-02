@@ -14,6 +14,10 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 - This repository's `CI.yml` runs on pushes to `master` and `develop` only, not to `release/*` and `hotfix/*` branches, which their pull requests test, nor to tags, which name commits already tested; so a release's commit is tested once, not once for its push and again for its pull request.
 
+### Fixed
+
+- The workflows' Julia caches no longer try to delete their older caches, which needs the permission `actions: write`, which the jobs lack, so the cleanup at each job's end no longer logs GitHub's refusal; GitHub evicts the older caches once the repository's caches reach its limit.
+
 ## [1.2.0] - 2026-11-01
 
 ### Added
