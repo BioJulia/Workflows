@@ -147,7 +147,6 @@ fails(result, message) = result.code == 1 && occursin(message, result.output)
 # Workflows
 # ---------
 
-# The shell of the step `name` of the workflow `file`, in .github/workflows: the block after its `run: |`, without its indentation.
 # The lines of each job of a workflow, by its key under `jobs:`.
 function workflow_jobs(file)
     lines = readlines(normpath(joinpath(@__DIR__, "..", "..", ".github", "workflows", file)))
@@ -164,6 +163,7 @@ function workflow_jobs(file)
     return jobs
 end
 
+# The shell of the step `name` of the workflow `file`, in .github/workflows: the block after its `run: |`, without its indentation.
 function workflow_step(file, name)
     lines = readlines(normpath(joinpath(@__DIR__, "..", "..", ".github", "workflows", file)))
     named = findfirst(line -> strip(line) == "- name: $(name)", lines)
@@ -175,4 +175,28 @@ function workflow_step(file, name)
         push!(block, isempty(strip(line)) ? "" : line[(indentation + 1):end])
     end
     return join(block, '\n') * '\n'
+end
+
+# The environment that the step `name` of the workflow `file` gives its shell, from its `env:`, with each expression evaluated in `contexts`, such as `"secrets.REGISTRATOR_TOKEN" => "token"`.
+# So a test gives what a caller does, its secrets, inputs and the outputs of earlier jobs, rather than the names that the step's shell reads, which it may change.
+# An expression is a context, or several joined by `||`, which takes the first that isn't empty; a context that isn't given is empty, as GitHub takes a secret that isn't set.
+function workflow_environment(file, name, contexts)
+    lines = readlines(normpath(joinpath(@__DIR__, "..", "..", ".github", "workflows", file)))
+    named = findfirst(line -> strip(line) == "- name: $(name)", lines)
+    environment = Dict{String, String}()
+    start = findnext(line -> strip(line) == "env:", lines, named)
+    finish = findnext(line -> occursin(r"^\s+run:", line), lines, named)
+    (start === nothing || start > finish) && return environment
+    for line in lines[(start + 1):(finish - 1)]
+        key, value = match(r"^\s+([A-Z_]+): (.*)$", line)
+        expression = match(r"^\$\{\{ (.*) \}\}$", value)
+        environment[key] = if expression === nothing
+            value
+        else
+            terms = strip.(split(expression[1], "||"))
+            all(term -> occursin(r"^[a-z_-]+(\.[A-Za-z0-9_-]+)+$", term), terms) || error("The expression of $(key) in $(file) isn't contexts joined by `||`: $(value)")
+            something((get(contexts, term, "") for term in terms if !isempty(get(contexts, term, "")))..., "")
+        end
+    end
+    return environment
 end
