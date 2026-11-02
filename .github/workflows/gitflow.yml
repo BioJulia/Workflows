@@ -57,7 +57,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
-      - uses: BioJulia/Workflows@v1.2.0
+      - uses: BioJulia/Workflows@v1.3.0
         with:
           check: source
           model: gitflow
@@ -75,7 +75,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
-      - uses: BioJulia/Workflows@v1.2.0
+      - uses: BioJulia/Workflows@v1.3.0
         with:
           check: version
           model: gitflow
@@ -94,7 +94,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
-      - uses: BioJulia/Workflows@v1.2.0
+      - uses: BioJulia/Workflows@v1.3.0
         with:
           check: changelog
           model: gitflow
@@ -121,7 +121,7 @@ jobs:
         with:
           delete-old-caches: false
       # Compares the main branch's public API and compat bounds with the head's, runs the main branch's tests against the head, and writes what it finds to the job summary.
-      - uses: BioJulia/Workflows@v1.2.0
+      - uses: BioJulia/Workflows@v1.3.0
         with:
           check: breaking
           model: gitflow
@@ -147,7 +147,7 @@ jobs:
         with:
           delete-old-caches: false
       # Checks for a new entry under `## [Unreleased]`, and where the source changes, compares the public API with the base's: removed or changed API needs an entry under `### Breaking`, and added API one under `### Added`.
-      - uses: BioJulia/Workflows@v1.2.0
+      - uses: BioJulia/Workflows@v1.3.0
         with:
           check: entry
           model: gitflow
