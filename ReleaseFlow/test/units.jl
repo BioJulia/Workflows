@@ -105,6 +105,18 @@ const R = ReleaseFlow
         @test failures[2] == "Toy: Error During Test at test/runtests.jl:6\n  Test threw exception\n  Expression: error(\"boom\")\n  boom"
         @test length(failures) == 2
         @test isempty(R.test_failures("Test Summary: | Pass  Total\n", directory))
+        @test R.failure_location(failures[1]) == ("test/runtests.jl", 4)
+        @test R.failure_location(failures[2]) == ("test/runtests.jl", 6)
+        @test R.failure_location("Got exception outside of a @test\n  boom") === nothing
+    end
+
+    @testset "retired tests" begin
+        settings = R.Settings(Dict("RELEASEFLOW_PROJECT" => "lib/Toy"))
+        @test R.retires(settings, "test/runtests.jl:4", ("lib/Toy/test/runtests.jl", 4))
+        @test R.retires(settings, "test/runtests.jl", ("lib/Toy/test/runtests.jl", 6))
+        @test !R.retires(settings, "test/runtests.jl:4", ("lib/Toy/test/runtests.jl", 6))
+        @test !R.retires(settings, "test/runtests.jl", ("test/runtests.jl", 4))
+        @test !R.retires(settings, "test/runtests.jl", nothing)
     end
 
     @testset "main" begin

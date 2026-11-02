@@ -233,6 +233,32 @@ end
         @test occursin("Test Failed at test/runtests.jl:", result.output)
         @test occursin("Expression: triple(2) == 6", result.output) && occursin("Evaluated: 7 == 6", result.output)
         @test !occursin("Stacktrace:", result.output)
+        # A retired test's failure doesn't count, and the summary gives its reason.
+        changed = replace(SOURCE, "3x" => "3x + 1")
+        retired = "[\"0.1.0\"]\n\"test/runtests.jl:4\" = \"It tested the old `triple`.\"\n"
+        release!(directory, "hotfix/v0.1.1", released, "0.1.1"; files = ["src/Toy.jl" => changed, "test/Retired.toml" => retired])
+        result = on("hotfix/v0.1.1")
+        @test passes(result)
+        @test occursin("retires, whose failures don't count:\n\n- `test/runtests.jl:4`: It tested the old `triple`.", result.output)
+        @test occursin("Test Failed at test/runtests.jl:4", result.output)
+        # A file without a line retires every failure in it.
+        release!(directory, "hotfix/v0.1.1", released, "0.1.1"; files = ["src/Toy.jl" => changed, "test/Retired.toml" => "[\"0.1.0\"]\n\"test/runtests.jl\" = \"Every test of the old `triple`.\"\n"])
+        @test passes(on("hotfix/v0.1.1"))
+        # An entry that retires no failure, and a table of another release, only warn.
+        stale = retired * "\"test/runtests.jl:2\" = \"It tested `double`.\"\n[\"0.0.1\"]\n\"test/runtests.jl\" = \"Older.\"\n"
+        release!(directory, "hotfix/v0.1.1", released, "0.1.1"; files = ["src/Toy.jl" => changed, "test/Retired.toml" => stale])
+        result = on("hotfix/v0.1.1")
+        @test passes(result)
+        @test occursin("retires test/runtests.jl:2, but no test there fails; remove it.", result.output)
+        @test occursin("retires tests of 0.0.1, which isn't the last release, 0.1.0, so they no longer apply", result.output)
+        # A failure that isn't retired still counts.
+        release!(directory, "hotfix/v0.1.1", released, "0.1.1"; files = ["src/Toy.jl" => changed, "test/Retired.toml" => "[\"0.1.0\"]\n\"test/runtests.jl:3\" = \"It tested `double`.\"\n"])
+        @test fails(on("hotfix/v0.1.1"), "The tests of origin/master fail")
+        # As do retired tests of the last release that aren't given as reasons, or a file that isn't TOML.
+        release!(directory, "hotfix/v0.1.1", released, "0.1.1"; files = ["src/Toy.jl" => changed, "test/Retired.toml" => "[\"0.1.0\"]\n\"test/runtests.jl:4\" = 4\n"])
+        @test fails(on("hotfix/v0.1.1"), "must give each retired test")
+        release!(directory, "hotfix/v0.1.1", released, "0.1.1"; files = ["src/Toy.jl" => changed, "test/Retired.toml" => "[0.1.0"])
+        @test fails(on("hotfix/v0.1.1"), "test/Retired.toml isn't valid TOML")
         release!(directory, "hotfix/v0.1.1", released, "0.1.1"; files = ["Project.toml" => project("0.1.1"; julia = "1.11")])
         @test fails(on("hotfix/v0.1.1"), "no longer admits")
     end
