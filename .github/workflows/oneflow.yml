@@ -134,6 +134,11 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+      - uses: julia-actions/setup-julia@da908477b5db94c10ffce8cfea9f2b3b9d5db687 # v3.0.3
+        with:
+          version: '1'
+      - uses: julia-actions/cache@9353db09a0f2bbbdec6f41791918c75d37391b36 # v3.5.0
+      # Checks for a new entry under `## [Unreleased]`, and where the source changes, compares the public API with the base's: removed or changed API needs an entry under `### Breaking`, and added API one under `### Added`.
       - uses: BioJulia/Workflows@v1.2.0
         with:
           check: entry

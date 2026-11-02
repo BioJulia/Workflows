@@ -126,6 +126,29 @@ end
         @test fails(on("feature/x"), "There's no CHANGELOG.md")
     end
 
+    # A change to the public API takes a new entry of its kind.
+    @testset "entry of the API" begin
+        directory, released, feature = gitflow_repository()
+        on(name; variables...) = check(directory, "entry"; RELEASEFLOW_BASE_REF = "origin/develop", RELEASEFLOW_HEAD_REF = name, variables...)
+        logged(title, entry) = replace(changelog(unreleased = ["A feature."], released = ["0.1.0" => ["First."]]), "- A feature.\n" => "- A feature.\n\n### $(title)\n\n- $(entry)\n")
+        work(source, title, entry = "A change.") = (branch!(directory, "feature/x", feature); commit!(directory, "Work", "src/Toy.jl" => source, "CHANGELOG.md" => logged(title, entry)); on("feature/x"))
+        added = replace(SOURCE, "export double, triple" => "export double, triple, quadruple", "triple(x) = 3x" => "triple(x) = 3x\nquadruple(x) = 4x")
+        result = work(added, "Changed")
+        @test fails(result, "feature/x adds public API, so CHANGELOG.md needs a new entry under `### Added`")
+        @test occursin("function Toy.quadruple", result.output) && !occursin("no longer provides", result.output)
+        @test passes(work(added, "Added"))
+        removed = replace(SOURCE, "export double, triple" => "export double", "triple(x) = 3x\n" => "")
+        result = work(removed, "Changed")
+        @test fails(result, "feature/x removes or changes public API of origin/develop, so CHANGELOG.md needs a new entry under `### Breaking`")
+        @test occursin("function Toy.triple", result.output)
+        @test passes(work(removed, "Breaking"))
+        # A dropped keyword is a change to a method, which is breaking.
+        @test fails(work(replace(SOURCE, "double(x; scale = 1) = 2x * scale" => "double(x) = 2x"), "Fixed"), "needs a new entry under `### Breaking`")
+        # A change of the source that keeps the API, or a pull request that leaves the source alone, needs any entry.
+        @test passes(work(replace(SOURCE, "triple(x) = 3x" => "triple(x) = x + 2x"), "Fixed"))
+        @test !occursin("Public API", work(SOURCE, "Changed").output)
+    end
+
     @testset "source" begin
         directory, released, feature = gitflow_repository()
         on(base, name, sha = name) = check(directory, "source"; RELEASEFLOW_BASE_BRANCH = base, RELEASEFLOW_HEAD_REF = name, RELEASEFLOW_HEAD_SHA = sha)

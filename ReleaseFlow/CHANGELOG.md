@@ -6,6 +6,10 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Added
+
+- The changelog entry check compares the public API of a pull request that changes the package's `src/` or `Project.toml` with its base's, and needs a new entry under `### Breaking` where it removes or changes any, and under `### Added` where it adds any, so that the release takes the right version from its pull requests' entries, rather than the breaking check finding a breaking change only at the release.
+
 ### Changed
 
 - This repository's `CI.yml` runs on pushes to `master` and `develop` only, not to `release/*` and `hotfix/*` branches, which their pull requests test, nor to tags, which name commits already tested; so a release's commit is tested once, not once for its push and again for its pull request.
