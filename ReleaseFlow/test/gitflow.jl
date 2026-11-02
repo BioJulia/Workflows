@@ -142,6 +142,14 @@ end
         @test fails(result, "feature/x removes or changes public API of origin/develop, so CHANGELOG.md needs a new entry under `### Breaking`")
         @test occursin("function Toy.triple", result.output)
         @test passes(work(removed, "Breaking"))
+        # Unexporting a name removes it, and exporting one adds it.
+        unexported = replace(SOURCE, "export double, triple" => "export double")
+        @test fails(work(unexported, "Changed"), "needs a new entry under `### Breaking`")
+        @test passes(work(unexported, "Breaking"))
+        commit!(directory, "Unexport", "src/Toy.jl" => unexported)
+        origin!(directory, "develop", git(directory, "rev-parse", "HEAD"))
+        @test fails(work(SOURCE, "Changed", "Export `triple` again."), "adds public API, so CHANGELOG.md needs a new entry under `### Added`")
+        origin!(directory, "develop", feature)
         # A dropped keyword is a change to a method, which is breaking.
         @test fails(work(replace(SOURCE, "double(x; scale = 1) = 2x * scale" => "double(x) = 2x"), "Fixed"), "needs a new entry under `### Breaking`")
         # A change of the source that keeps the API, or a pull request that leaves the source alone, needs any entry.
@@ -211,6 +219,11 @@ end
         renamed = replace(SOURCE, "export double, triple" => "export double, treble", "triple(x) = 3x" => "treble(x) = 3x\nBase.@deprecate_binding triple treble")
         release!(directory, "release/v0.2.0", feature, "0.2.0"; files = ["src/Toy.jl" => renamed])
         @test passes(on("release/v0.2.0"))
+        # A name that's still defined but no longer exported is gone for `using Toy`.
+        release!(directory, "release/v0.1.1", feature, "0.1.1"; files = ["src/Toy.jl" => replace(SOURCE, "export double, triple" => "export double")])
+        result = on("release/v0.1.1")
+        @test fails(result, "must be 0.2.0 or 1.0.0, not 0.1.1")
+        @test occursin("no longer provides:\n\n```\nfunction Toy.triple", result.output)
         release!(directory, "hotfix/v0.1.1", released, "0.1.1"; files = ["src/Toy.jl" => replace(SOURCE, "double(x; scale = 1) = 2x * scale" => "double(x) = 2x")])
         @test fails(on("hotfix/v0.1.1"), "A hotfix may not make breaking changes")
         release!(directory, "hotfix/v0.1.1", released, "0.1.1"; files = ["src/Toy.jl" => replace(SOURCE, "3x" => "3x + 1")])

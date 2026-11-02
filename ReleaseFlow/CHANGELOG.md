@@ -17,6 +17,7 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 ### Fixed
 
 - The workflows' Julia caches no longer try to delete their older caches, which needs the permission `actions: write`, which the jobs lack, so the cleanup at each job's end no longer logs GitHub's refusal; GitHub evicts the older caches once the repository's caches reach its limit.
+- The breaking check, and the changelog entry check's comparison of the public API, count a name that's still defined but no longer exported or declared `public` as removed, since `using` no longer gives it, rather than as still provided; and so one that becomes public as added.
 
 ## [1.2.0] - 2026-11-01
 
