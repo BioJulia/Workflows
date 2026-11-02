@@ -84,10 +84,20 @@ function provided(label, text, keyword = nothing)
     return hasmethod(f, types, (name,))
 end
 
-# The entries of `label` as it resolves now, or none where it no longer resolves.
+# Whether the binding of `label` is public in its module, exported or declared `public`, as `using` and the documentation take it.
+# A deprecated binding, such as one of `Base.@deprecate_binding`, is exported, though `names` leaves it out.
+function is_public(label)
+    parts = split(label, '.')
+    parent = resolve(join(parts[1:(end - 1)], '.'))
+    name = Symbol(last(parts))
+    return isdefined(Base, :ispublic) ? Base.ispublic(parent, name) : Base.isexported(parent, name)
+end
+
+# The entries of `label` as it resolves now, or none where it no longer resolves, or is no longer public, as a name that's still defined but no longer exported.
 # `names` leaves out a deprecated binding, such as one of `Base.@deprecate_binding`, which still provides the old name.
 function resolved_entries(label)
     value = try
+        is_public(label) || return Set{String}()
         resolve(label)
     catch
         return Set{String}()
