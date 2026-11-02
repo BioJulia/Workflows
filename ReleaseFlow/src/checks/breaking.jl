@@ -57,16 +57,19 @@ function with_checkout(f, settings::Settings, ref)
     end
 end
 
-# The entries of the last release's public API that the head no longer provides.
-function api_removals(settings::Settings, release::LastRelease, directory, name)
-    listing = joinpath(mktempdir(), "base.txt")
-    ok, output, errors = julia_in(package_directory(settings, directory), `$(SURFACE) $(name) list`)
-    ok || (failure(settings, "Breaking changes", "The public API of $(label(release)) couldn't be listed:\n$(last(errors, 2000))"); return String[])
+# The entries of the public API of the package `name` in the directory `from`, labelled `from_label`, that the package in `to`, labelled `to_label`, doesn't provide; a failure of the check `check_name` where either can't be loaded.
+function api_missing(settings::Settings, check_name, name, (from, from_label), (to, to_label))
+    listing = joinpath(mktempdir(), "listing.txt")
+    ok, output, errors = julia_in(from, `$(SURFACE) $(name) list`)
+    ok || (failure(settings, check_name, "The public API of $(from_label) couldn't be listed:\n$(last(errors, 2000))"); return String[])
     write(listing, output)
-    ok, output, errors = julia_in(package_directory(settings), `$(SURFACE) $(name) against $(listing)`)
-    ok || (failure(settings, "Breaking changes", "The public API of $(head_label(settings)) couldn't be compared:\n$(last(errors, 2000))"); return String[])
+    ok, output, errors = julia_in(to, `$(SURFACE) $(name) against $(listing)`)
+    ok || (failure(settings, check_name, "The public API of $(to_label) couldn't be compared:\n$(last(errors, 2000))"); return String[])
     return filter(!isempty, split(output, '\n'))
 end
+
+# The entries of the last release's public API that the head no longer provides.
+api_removals(settings::Settings, release::LastRelease, directory, name) = api_missing(settings, "Breaking changes", name, (package_directory(settings, directory), label(release)), (package_directory(settings), head_label(settings)))
 
 # The lines that start a failure in the output of Julia's tests.
 const FAILURE_HEADER = r"Test Failed at|Error During Test at|Got exception outside of a @test"
