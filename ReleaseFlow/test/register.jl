@@ -55,7 +55,7 @@
         write(log, "")
         summary = joinpath(directory, "summary")
         write(summary, "")
-        environment = Dict("PATH" => "$(bin):$(ENV["PATH"])", "LOG" => log, "REPOSITORY" => "Example/Toy.jl", "SHA" => "abc", "TOKEN" => "GITHUB_TOKEN", "GITHUB_STEP_SUMMARY" => summary)
+        environment = Dict("PATH" => "$(bin):$(ENV["PATH"])", "LOG" => log, "REPOSITORY" => "Example/Toy.jl", "SHA" => "abc", "GITHUB_STEP_SUMMARY" => summary)
         for (key, value) in variables
             environment[string(key)] = string(value)
         end
@@ -77,8 +77,11 @@
         # A package at the root names no subdirectory, and a release without notes has none.
         result = step("Comment for Registrator"; GH_TOKEN = "token", RELEASEFLOW_PROJECT = "", VERSION = "1.2.0", NOTES = "")
         @test occursin("-f body=@JuliaRegistrator register --jq", result.log)
+        # Without REGISTRATOR_TOKEN, the workflow's own token comments.
+        result = step("Comment for Registrator"; GH_TOKEN = "", WORKFLOW_TOKEN = "token", RELEASEFLOW_PROJECT = "", VERSION = "1.2.0", NOTES = "")
+        @test result.code == 0 && occursin("-f body=@JuliaRegistrator register --jq", result.log)
         # The workflow's own token, refused without contents: write: the error gives GitHub's message and the permission, and the summary the comment to make by hand.
-        result = step("Comment for Registrator"; GH_TOKEN = "refused", RELEASEFLOW_PROJECT = "lib/Toy", VERSION = "1.2.0", NOTES = "- A feature.")
+        result = step("Comment for Registrator"; GH_TOKEN = "", WORKFLOW_TOKEN = "refused", RELEASEFLOW_PROJECT = "lib/Toy", VERSION = "1.2.0", NOTES = "- A feature.")
         @test result.code == 1
         @test occursin("::error title=Register::GITHUB_TOKEN couldn't comment on abc, for 1.2.0: gh: Resource not accessible by integration (HTTP 403)", result.output)
         @test occursin("needs the permission contents: write, which the caller's job that uses register.yml grants", result.output)
@@ -86,9 +89,12 @@
         @test occursin("## Register 1.2.0", result.summary)
         @test occursin("```\n@JuliaRegistrator register subdir=lib/Toy\n\nRelease notes:\n\n- A feature.\n```", result.summary)
         # A REGISTRATOR_TOKEN that GitHub refuses: the error says what the token must be.
-        result = step("Comment for Registrator"; GH_TOKEN = "refused", TOKEN = "REGISTRATOR_TOKEN", RELEASEFLOW_PROJECT = "", VERSION = "1.2.0", NOTES = "")
+        result = step("Comment for Registrator"; GH_TOKEN = "refused", WORKFLOW_TOKEN = "token", RELEASEFLOW_PROJECT = "", VERSION = "1.2.0", NOTES = "")
         @test result.code == 1
         @test occursin("REGISTRATOR_TOKEN couldn't comment on abc, for 1.2.0: gh: Resource not accessible", result.output)
         @test occursin("write access to Example/Toy.jl, with the repository permission Contents: Read and write", result.output)
+        # Given neither token, there's nothing to comment with.
+        result = step("Comment for Registrator"; GH_TOKEN = "", RELEASEFLOW_PROJECT = "", VERSION = "1.2.0", NOTES = "")
+        @test result.code == 1 && occursin("needs REGISTRATOR_TOKEN or the workflow's GITHUB_TOKEN", result.output) && isempty(result.log)
     end
 end
