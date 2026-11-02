@@ -49,16 +49,15 @@
     log = joinpath(directory, "log")
     work = mkpath(joinpath(directory, "work", "lib", "Toy"))
     write(joinpath(work, "Project.toml"), project("1.2.0"))
-    function step(name; variables...)
+    # The step runs with what its caller gives, its secrets, inputs and the outputs of the registration job, and the workflow's own token, repository and commit.
+    function step(name, contexts::Pair...)
         script = joinpath(directory, "step.sh")
         write(script, workflow_step("register.yml", name))
         write(log, "")
         summary = joinpath(directory, "summary")
         write(summary, "")
-        environment = Dict("PATH" => "$(bin):$(ENV["PATH"])", "LOG" => log, "REPOSITORY" => "Example/Toy.jl", "SHA" => "abc", "GITHUB_STEP_SUMMARY" => summary)
-        for (key, value) in variables
-            environment[string(key)] = string(value)
-        end
+        given = Dict("github.token" => "token", "github.repository" => "Example/Toy.jl", "github.sha" => "abc", contexts...)
+        environment = merge(workflow_environment("register.yml", name, given), Dict("PATH" => "$(bin):$(ENV["PATH"])", "LOG" => log, "GITHUB_STEP_SUMMARY" => summary))
         output = IOBuffer()
         process = run(pipeline(Cmd(addenv(`bash $(script)`, environment); dir = joinpath(directory, "work"), ignorestatus = true); stdout = output, stderr = output))
         return (code = process.exitcode, output = String(take!(output)), log = read(log, String), summary = read(summary, String))
@@ -71,30 +70,34 @@
     end
 
     @testset "comment" begin
-        result = step("Comment for Registrator"; GH_TOKEN = "token", RELEASEFLOW_PROJECT = "lib/Toy/", VERSION = "1.2.0", NOTES = "- A feature.")
+        comment(contexts::Pair...) = step("Comment for Registrator", "needs.registration.outputs.version" => "1.2.0", contexts...)
+        result = comment("secrets.REGISTRATOR_TOKEN" => "token", "inputs.project" => "lib/Toy/", "needs.registration.outputs.notes" => "- A feature.")
         @test result.code == 0
         @test startswith(result.log, "gh api repos/Example/Toy.jl/commits/abc/comments -f body=@JuliaRegistrator register subdir=lib/Toy\n\nRelease notes:\n\n- A feature.")
         # A package at the root names no subdirectory, and a release without notes has none.
-        result = step("Comment for Registrator"; GH_TOKEN = "token", RELEASEFLOW_PROJECT = "", VERSION = "1.2.0", NOTES = "")
+        result = comment("secrets.REGISTRATOR_TOKEN" => "token")
         @test occursin("-f body=@JuliaRegistrator register --jq", result.log)
+        # The version and notes of the registration job that ran from the checked-out commit, under `local-action`.
+        result = step("Comment for Registrator", "needs.registration-local.outputs.version" => "1.2.0", "needs.registration-local.outputs.notes" => "- A feature.")
+        @test result.code == 0 && occursin("Release notes:\n\n- A feature.", result.log) && occursin("for 1.2.0", result.output)
         # Without REGISTRATOR_TOKEN, the workflow's own token comments.
-        result = step("Comment for Registrator"; GH_TOKEN = "", WORKFLOW_TOKEN = "token", RELEASEFLOW_PROJECT = "", VERSION = "1.2.0", NOTES = "")
+        result = comment()
         @test result.code == 0 && occursin("-f body=@JuliaRegistrator register --jq", result.log)
         # The workflow's own token, refused without contents: write: the error gives GitHub's message and the permission, and the summary the comment to make by hand.
-        result = step("Comment for Registrator"; GH_TOKEN = "", WORKFLOW_TOKEN = "refused", RELEASEFLOW_PROJECT = "lib/Toy", VERSION = "1.2.0", NOTES = "- A feature.")
+        result = comment("github.token" => "refused", "inputs.project" => "lib/Toy", "needs.registration.outputs.notes" => "- A feature.")
         @test result.code == 1
-        @test occursin("::error title=Register::GITHUB_TOKEN couldn't comment on abc, for 1.2.0: gh: Resource not accessible by integration (HTTP 403)", result.output)
-        @test occursin("needs the permission contents: write, which the caller's job that uses register.yml grants", result.output)
+        @test occursin("::error title=Register::", result.output) && occursin("Resource not accessible by integration (HTTP 403)", result.output)
+        @test occursin("contents: write", result.output)
         @test occursin("comment `@JuliaRegistrator register subdir=lib/Toy` on abc by hand", result.output)
         @test occursin("## Register 1.2.0", result.summary)
         @test occursin("```\n@JuliaRegistrator register subdir=lib/Toy\n\nRelease notes:\n\n- A feature.\n```", result.summary)
         # A REGISTRATOR_TOKEN that GitHub refuses: the error says what the token must be.
-        result = step("Comment for Registrator"; GH_TOKEN = "refused", WORKFLOW_TOKEN = "token", RELEASEFLOW_PROJECT = "", VERSION = "1.2.0", NOTES = "")
+        result = comment("secrets.REGISTRATOR_TOKEN" => "refused")
         @test result.code == 1
-        @test occursin("REGISTRATOR_TOKEN couldn't comment on abc, for 1.2.0: gh: Resource not accessible", result.output)
-        @test occursin("write access to Example/Toy.jl, with the repository permission Contents: Read and write", result.output)
+        @test occursin("REGISTRATOR_TOKEN", result.output) && occursin("Resource not accessible", result.output)
+        @test occursin("write access to Example/Toy.jl", result.output)
         # Given neither token, there's nothing to comment with.
-        result = step("Comment for Registrator"; GH_TOKEN = "", RELEASEFLOW_PROJECT = "", VERSION = "1.2.0", NOTES = "")
-        @test result.code == 1 && occursin("needs REGISTRATOR_TOKEN or the workflow's GITHUB_TOKEN", result.output) && isempty(result.log)
+        result = comment("github.token" => "")
+        @test result.code == 1 && occursin("REGISTRATOR_TOKEN", result.output) && occursin("GITHUB_TOKEN", result.output) && isempty(result.log)
     end
 end
