@@ -1,18 +1,14 @@
 # The repository's own checks: the tests of ReleaseFlow, Runic formatting, actionlint on the workflows, and the pins of the workflows' calls of the action.
 name: CI
 
+# A release or hotfix branch is tested by its pull request, and a tag names a commit that its branch's push has tested, so neither has a push run of its own.
 on:
   push:
-    branches:
-      - master
-      - develop
-      - release/*
-      - hotfix/*
-    tags: ['v*']
+    branches: [master, develop]
   pull_request:
   workflow_dispatch:
 
-# A pull request's new push cancels the run of its outdated commit; a push to a branch or a tag runs to the end, so that each commit there keeps its result.
+# A pull request's new push cancels the run of its outdated commit; a push to master or develop runs to the end, so that each commit there keeps its result.
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
