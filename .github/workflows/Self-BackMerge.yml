@@ -1,11 +1,15 @@
 # This repository's own caller of the reusable back-merge.yml, which other repositories call as BioJulia/Workflows/.github/workflows/back-merge.yml@v1; the Self- files apply this repository's workflows to itself.
 # Once a release or hotfix merges into master, this repository's reusable back-merge workflow opens the pull request that brings master back into develop.
+# It merges that pull request once TagBot has tagged the release and the required checks, of Self: Gitflow and CI, pass; their runs, and TagBot's, run this workflow again.
 name: "Self: Back-merge"
 
 on:
   push:
     branches:
       - master
+  workflow_run:
+    workflows: [TagBot, "Self: Gitflow", CI]
+    types: [completed]
   workflow_dispatch:
 
 permissions: {}
@@ -19,6 +23,7 @@ jobs:
     with:
       main-branch: master
       project: ReleaseFlow
+      auto-merge: true
     secrets:
       RELEASEFLOW_APP_CLIENT_ID: ${{ secrets.RELEASEFLOW_APP_CLIENT_ID }}
       RELEASEFLOW_APP_PRIVATE_KEY: ${{ secrets.RELEASEFLOW_APP_PRIVATE_KEY }}
