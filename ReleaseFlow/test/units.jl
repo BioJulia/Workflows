@@ -119,6 +119,21 @@ const R = ReleaseFlow
         @test !R.retires(settings, "test/runtests.jl", nothing)
     end
 
+    @testset "old tests" begin
+        # A release without tests has no failures.
+        @test R.old_tests(R.Settings(Dict{String, String}()), mktempdir()) == (true, String[])
+    end
+
+    @testset "registry" begin
+        # A fresh runner's depot has no registry, which the package's processes need to resolve its dependencies, so the check installs it.
+        # The depot is a new one, and Julia's own, for the standard library, without the user's, which may have a registry.
+        depot = join([mktempdir(), abspath(Sys.BINDIR, Base.DATAROOTDIR, "julia")], Sys.iswindows() ? ';' : ':')
+        registries(install) = read(addenv(`$(Base.julia_cmd()) --startup-file=no --project=$(pkgdir(ReleaseFlow)) -e "using ReleaseFlow, Pkg; $(install ? "ReleaseFlow.install_registry(ReleaseFlow.Settings(Dict{String, String}()));" : "") print(join(sort([r.name for r in Pkg.Registry.reachable_registries()]), ','))"`, "JULIA_DEPOT_PATH" => depot), String)
+        @test registries(false) == ""
+        @test registries(true) == "General"
+        @test R.error_message("ERROR: expected package `BioGenerics [47718e42]` to be registered\nStacktrace:\n [1] pkgerror(msg::String)\n") == "ERROR: expected package `BioGenerics [47718e42]` to be registered"
+    end
+
     @testset "main" begin
         @test redirect_stderr(() -> R.main(String[]), devnull) == 2
         @test redirect_stderr(() -> R.main(["nonsense"]), devnull) == 2
