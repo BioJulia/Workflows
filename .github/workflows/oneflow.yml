@@ -53,7 +53,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
-      - uses: BioJulia/Workflows@v1.3.1
+      - uses: BioJulia/Workflows@v1.4.0
         with:
           check: source
           model: oneflow
@@ -73,7 +73,7 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
-      - uses: BioJulia/Workflows@v1.3.1
+      - uses: BioJulia/Workflows@v1.4.0
         with:
           check: version
           model: oneflow
@@ -92,7 +92,7 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
-      - uses: BioJulia/Workflows@v1.3.1
+      - uses: BioJulia/Workflows@v1.4.0
         with:
           check: changelog
           model: oneflow
@@ -119,7 +119,7 @@ jobs:
       - uses: julia-actions/cache@9353db09a0f2bbbdec6f41791918c75d37391b36 # v3.5.0
         with:
           delete-old-caches: false
-      - uses: BioJulia/Workflows@v1.3.1
+      - uses: BioJulia/Workflows@v1.4.0
         with:
           check: breaking
           model: oneflow
@@ -145,7 +145,7 @@ jobs:
         with:
           delete-old-caches: false
       # Checks for a new entry under `## [Unreleased]`, and where the source changes, compares the public API with the base's: removed or changed API needs an entry under `### Breaking`, and added API one under `### Added`.
-      - uses: BioJulia/Workflows@v1.3.1
+      - uses: BioJulia/Workflows@v1.4.0
         with:
           check: entry
           model: oneflow
