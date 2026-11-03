@@ -71,18 +71,20 @@ function section_text(text, version)
 end
 
 # The entries of the subsection `title`, such as `### Breaking`, of `section`.
-function subsection_entries(section::Section, title)
+function subsection(section::Section, title)
     inside = false
-    found = 0
+    found = String[]
     for line in section.lines
         if startswith(line, "### ")
             inside = lowercase(strip(line[5:end])) == lowercase(title)
         elseif inside && is_entry(line)
-            found += 1
+            push!(found, line)
         end
     end
     return found
 end
+
+subsection_entries(section::Section, title) = length(subsection(section, title))
 
 function head_changelog(settings::Settings)
     path = joinpath(package_directory(settings), "CHANGELOG.md")

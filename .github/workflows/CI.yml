@@ -1,18 +1,14 @@
 # The repository's own checks: the tests of ReleaseFlow, Runic formatting, actionlint on the workflows, and the pins of the workflows' calls of the action.
 name: CI
 
+# A release or hotfix branch is tested by its pull request, and a tag names a commit that its branch's push has tested, so neither has a push run of its own.
 on:
   push:
-    branches:
-      - master
-      - develop
-      - release/*
-      - hotfix/*
-    tags: ['v*']
+    branches: [master, develop]
   pull_request:
   workflow_dispatch:
 
-# A pull request's new push cancels the run of its outdated commit; a push to a branch or a tag runs to the end, so that each commit there keeps its result.
+# A pull request's new push cancels the run of its outdated commit; a push to master or develop runs to the end, so that each commit there keeps its result.
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
@@ -29,7 +25,10 @@ jobs:
       - uses: julia-actions/setup-julia@da908477b5db94c10ffce8cfea9f2b3b9d5db687 # v3.0.3
         with:
           version: '1'
+      # Deleting the older caches needs actions: write, which the job lacks, so they're left to GitHub, which evicts them once the repository's caches reach its limit.
       - uses: julia-actions/cache@9353db09a0f2bbbdec6f41791918c75d37391b36 # v3.5.0
+        with:
+          delete-old-caches: false
       - name: Run the tests
         run: |
           julia --project=ReleaseFlow/test -e 'using Pkg; Pkg.instantiate()'

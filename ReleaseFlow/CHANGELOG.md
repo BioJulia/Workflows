@@ -6,6 +6,22 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-11-02
+
+### Added
+
+- The changelog entry check compares the public API of a pull request that changes the package's `src/` or `Project.toml` with its base's, and needs a new entry under `### Breaking` where it removes or changes any, and under `### Added` where it adds any, so that the release takes the right version from its pull requests' entries, rather than the breaking check finding a breaking change only at the release.
+- The breaking check doesn't count the failures of the last release's tests that the head's `test/Retired.toml` retires, by their path and line under the release's version, with a reason that the job's summary lists, so that a test of internals that the head changes, which the tagged release can't drop, doesn't make the change breaking.
+
+### Changed
+
+- This repository's `CI.yml` runs on pushes to `master` and `develop` only, not to `release/*` and `hotfix/*` branches, which their pull requests test, nor to tags, which name commits already tested; so a release's commit is tested once, not once for its push and again for its pull request.
+
+### Fixed
+
+- The workflows' Julia caches no longer try to delete their older caches, which needs the permission `actions: write`, which the jobs lack, so the cleanup at each job's end no longer logs GitHub's refusal; GitHub evicts the older caches once the repository's caches reach its limit.
+- The breaking check, and the changelog entry check's comparison of the public API, count a name that's still defined but no longer exported or declared `public` as removed, since `using` no longer gives it, rather than as still provided; and so one that becomes public as added.
+
 ## [1.2.0] - 2026-11-01
 
 ### Added
@@ -71,7 +87,8 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - The back-merge workflow opens its pull request with a GitHub App's token, from the secrets `RELEASEFLOW_APP_CLIENT_ID` and `RELEASEFLOW_APP_PRIVATE_KEY`, in preference to `RELEASEFLOW_TOKEN`; the README explains how to create the app.
 - The back-merge workflow creates its branch with the job's own token, so the app or personal token needs only read and write access to pull requests; where GitHub refuses the job's token the branch, the other token creates it, with access to contents and workflows.
 
-[Unreleased]: https://github.com/BioJulia/Workflows/compare/v1.2.0...HEAD
+[Unreleased]: https://github.com/BioJulia/Workflows/compare/v1.3.0...HEAD
+[1.3.0]: https://github.com/BioJulia/Workflows/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/BioJulia/Workflows/compare/v1.1.1...v1.2.0
 [1.1.1]: https://github.com/BioJulia/Workflows/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/BioJulia/Workflows/compare/v1.0.1...v1.1.0

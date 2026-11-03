@@ -126,6 +126,37 @@ end
         @test fails(on("feature/x"), "There's no CHANGELOG.md")
     end
 
+    # A change to the public API takes a new entry of its kind.
+    @testset "entry of the API" begin
+        directory, released, feature = gitflow_repository()
+        on(name; variables...) = check(directory, "entry"; RELEASEFLOW_BASE_REF = "origin/develop", RELEASEFLOW_HEAD_REF = name, variables...)
+        logged(title, entry) = replace(changelog(unreleased = ["A feature."], released = ["0.1.0" => ["First."]]), "- A feature.\n" => "- A feature.\n\n### $(title)\n\n- $(entry)\n")
+        work(source, title, entry = "A change.") = (branch!(directory, "feature/x", feature); commit!(directory, "Work", "src/Toy.jl" => source, "CHANGELOG.md" => logged(title, entry)); on("feature/x"))
+        added = replace(SOURCE, "export double, triple" => "export double, triple, quadruple", "triple(x) = 3x" => "triple(x) = 3x\nquadruple(x) = 4x")
+        result = work(added, "Changed")
+        @test fails(result, "feature/x adds public API, so CHANGELOG.md needs a new entry under `### Added`")
+        @test occursin("function Toy.quadruple", result.output) && !occursin("no longer provides", result.output)
+        @test passes(work(added, "Added"))
+        removed = replace(SOURCE, "export double, triple" => "export double", "triple(x) = 3x\n" => "")
+        result = work(removed, "Changed")
+        @test fails(result, "feature/x removes or changes public API of origin/develop, so CHANGELOG.md needs a new entry under `### Breaking`")
+        @test occursin("function Toy.triple", result.output)
+        @test passes(work(removed, "Breaking"))
+        # Unexporting a name removes it, and exporting one adds it.
+        unexported = replace(SOURCE, "export double, triple" => "export double")
+        @test fails(work(unexported, "Changed"), "needs a new entry under `### Breaking`")
+        @test passes(work(unexported, "Breaking"))
+        commit!(directory, "Unexport", "src/Toy.jl" => unexported)
+        origin!(directory, "develop", git(directory, "rev-parse", "HEAD"))
+        @test fails(work(SOURCE, "Changed", "Export `triple` again."), "adds public API, so CHANGELOG.md needs a new entry under `### Added`")
+        origin!(directory, "develop", feature)
+        # A dropped keyword is a change to a method, which is breaking.
+        @test fails(work(replace(SOURCE, "double(x; scale = 1) = 2x * scale" => "double(x) = 2x"), "Fixed"), "needs a new entry under `### Breaking`")
+        # A change of the source that keeps the API, or a pull request that leaves the source alone, needs any entry.
+        @test passes(work(replace(SOURCE, "triple(x) = 3x" => "triple(x) = x + 2x"), "Fixed"))
+        @test !occursin("Public API", work(SOURCE, "Changed").output)
+    end
+
     @testset "source" begin
         directory, released, feature = gitflow_repository()
         on(base, name, sha = name) = check(directory, "source"; RELEASEFLOW_BASE_BRANCH = base, RELEASEFLOW_HEAD_REF = name, RELEASEFLOW_HEAD_SHA = sha)
@@ -188,6 +219,11 @@ end
         renamed = replace(SOURCE, "export double, triple" => "export double, treble", "triple(x) = 3x" => "treble(x) = 3x\nBase.@deprecate_binding triple treble")
         release!(directory, "release/v0.2.0", feature, "0.2.0"; files = ["src/Toy.jl" => renamed])
         @test passes(on("release/v0.2.0"))
+        # A name that's still defined but no longer exported is gone for `using Toy`.
+        release!(directory, "release/v0.1.1", feature, "0.1.1"; files = ["src/Toy.jl" => replace(SOURCE, "export double, triple" => "export double")])
+        result = on("release/v0.1.1")
+        @test fails(result, "must be 0.2.0 or 1.0.0, not 0.1.1")
+        @test occursin("no longer provides:\n\n```\nfunction Toy.triple", result.output)
         release!(directory, "hotfix/v0.1.1", released, "0.1.1"; files = ["src/Toy.jl" => replace(SOURCE, "double(x; scale = 1) = 2x * scale" => "double(x) = 2x")])
         @test fails(on("hotfix/v0.1.1"), "A hotfix may not make breaking changes")
         release!(directory, "hotfix/v0.1.1", released, "0.1.1"; files = ["src/Toy.jl" => replace(SOURCE, "3x" => "3x + 1")])
@@ -197,6 +233,32 @@ end
         @test occursin("Test Failed at test/runtests.jl:", result.output)
         @test occursin("Expression: triple(2) == 6", result.output) && occursin("Evaluated: 7 == 6", result.output)
         @test !occursin("Stacktrace:", result.output)
+        # A retired test's failure doesn't count, and the summary gives its reason.
+        changed = replace(SOURCE, "3x" => "3x + 1")
+        retired = "[\"0.1.0\"]\n\"test/runtests.jl:4\" = \"It tested the old `triple`.\"\n"
+        release!(directory, "hotfix/v0.1.1", released, "0.1.1"; files = ["src/Toy.jl" => changed, "test/Retired.toml" => retired])
+        result = on("hotfix/v0.1.1")
+        @test passes(result)
+        @test occursin("retires, whose failures don't count:\n\n- `test/runtests.jl:4`: It tested the old `triple`.", result.output)
+        @test occursin("Test Failed at test/runtests.jl:4", result.output)
+        # A file without a line retires every failure in it.
+        release!(directory, "hotfix/v0.1.1", released, "0.1.1"; files = ["src/Toy.jl" => changed, "test/Retired.toml" => "[\"0.1.0\"]\n\"test/runtests.jl\" = \"Every test of the old `triple`.\"\n"])
+        @test passes(on("hotfix/v0.1.1"))
+        # An entry that retires no failure, and a table of another release, only warn.
+        stale = retired * "\"test/runtests.jl:2\" = \"It tested `double`.\"\n[\"0.0.1\"]\n\"test/runtests.jl\" = \"Older.\"\n"
+        release!(directory, "hotfix/v0.1.1", released, "0.1.1"; files = ["src/Toy.jl" => changed, "test/Retired.toml" => stale])
+        result = on("hotfix/v0.1.1")
+        @test passes(result)
+        @test occursin("retires test/runtests.jl:2, but no test there fails; remove it.", result.output)
+        @test occursin("retires tests of 0.0.1, which isn't the last release, 0.1.0, so they no longer apply", result.output)
+        # A failure that isn't retired still counts.
+        release!(directory, "hotfix/v0.1.1", released, "0.1.1"; files = ["src/Toy.jl" => changed, "test/Retired.toml" => "[\"0.1.0\"]\n\"test/runtests.jl:3\" = \"It tested `double`.\"\n"])
+        @test fails(on("hotfix/v0.1.1"), "The tests of origin/master fail")
+        # As do retired tests of the last release that aren't given as reasons, or a file that isn't TOML.
+        release!(directory, "hotfix/v0.1.1", released, "0.1.1"; files = ["src/Toy.jl" => changed, "test/Retired.toml" => "[\"0.1.0\"]\n\"test/runtests.jl:4\" = 4\n"])
+        @test fails(on("hotfix/v0.1.1"), "must give each retired test")
+        release!(directory, "hotfix/v0.1.1", released, "0.1.1"; files = ["src/Toy.jl" => changed, "test/Retired.toml" => "[0.1.0"])
+        @test fails(on("hotfix/v0.1.1"), "test/Retired.toml isn't valid TOML")
         release!(directory, "hotfix/v0.1.1", released, "0.1.1"; files = ["Project.toml" => project("0.1.1"; julia = "1.11")])
         @test fails(on("hotfix/v0.1.1"), "no longer admits")
     end

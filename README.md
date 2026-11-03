@@ -343,8 +343,20 @@ GitHub shows the token's owner as the author of the branches and pull requests, 
   Its comparison links compare each version's tag with the one before, and the newest with `HEAD` for the unreleased changes, unless `check-links` is false.
 - **Breaking changes.** The last release's public API, its names, methods, keywords and fields, is still provided; its tests still pass against the head; and the compat bounds of Julia and of the dependencies still admit every version that they did.
   A breaking change needs the next major version, or the next minor version below 1.0, and a `### Breaking` subsection in the version's section; a hotfix can't be breaking.
+  A public name is still exported, or declared `public`, as `using` takes it; a deprecated binding, such as one of `Base.@deprecate_binding`, still provides its old name.
   The job's summary lists what breaks.
+  A release's tests can't change once it's tagged, so a test of internals that the head changes is retired in the head's `test/Retired.toml`, by its path in the package, with a line or without for the whole file, under the version it belongs to, with the reason:
+
+  ```toml
+  ["1.2.0"]
+  "test/register.jl:69" = "It tested the shell's internal TOKEN variable, which the token choice replaced."
+  ```
+
+  A retired test's failure doesn't count, and the summary lists it with its reason; an exception outside a `@test` names no line, and can't be retired.
+  The table lapses once the next release is the last, whose own tests the check runs; an entry that retires no failure, or a table of another release, gives a warning to remove it.
 - **Changelog entry.** A pull request of unreleased work adds an entry under `## [Unreleased]`, or rewords one, unless it has the `skip changelog` label, or brings the main branch back into `develop`.
+  Where it changes the package's `src/` or `Project.toml`, its public API is compared with the base's, as the breaking check compares a release's: a removed or changed name, method, keyword or field needs a new entry under `### Breaking`, and an added one a new entry under `### Added`.
+  A change in behaviour that keeps the API, or a feature that adds none, such as a workflow's input, isn't seen, and the breaking check of the release is left to find a breaking one.
 - **Release.** For trunk, whether the pull request changes the version, which decides which checks run.
 
 **The last release.** Gitflow compares a release with its main branch, which holds only releases.
