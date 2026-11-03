@@ -8,6 +8,12 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [1.3.1] - 2026-11-03
 
+### Fixed
+
+- The changelog entry check, and the breaking check, failed for a package with a registered dependency, with "The public API of … couldn't be listed", on a runner without a registry, as a fresh runner is: 1.3.0's comparison of the public API resolved the package's dependencies without installing one, and the checks now install it first.
+  Where a listing fails, the error now gives Julia's message, such as "expected package … to be registered", rather than the end of its stack trace.
+- The breaking check failed where the last release has no `test/` directory, since 1.3.0's retirement of tests took its note of no tests as a failure; it now finds no failures there.
+
 ## [1.3.0] - 2026-11-02
 
 ### Added

@@ -57,14 +57,26 @@ function with_checkout(f, settings::Settings, ref)
     end
 end
 
+# The package's processes resolve its dependencies in the check's depot, which on a fresh runner has no registry, and `Pkg.resolve` installs none.
+# So the registry `settings.registry` is installed first, unless it's a path, or installed already.
+function install_registry(settings::Settings)
+    name = settings.registry
+    isdir(name) || any(instance -> instance.name == name, Pkg.Registry.reachable_registries()) || registry(settings)
+    return
+end
+
+# What a process of Julia wrote to stderr before its stack trace, such as Pkg's message, which names the cause; its end where that's long.
+error_message(errors) = last(strip(first(split(errors, r"^\s*Stacktrace:"m))), 2000)
+
 # The entries of the public API of the package `name` in the directory `from`, labelled `from_label`, that the package in `to`, labelled `to_label`, doesn't provide; a failure of the check `check_name` where either can't be loaded.
 function api_missing(settings::Settings, check_name, name, (from, from_label), (to, to_label))
+    install_registry(settings)
     listing = joinpath(mktempdir(), "listing.txt")
     ok, output, errors = julia_in(from, `$(SURFACE) $(name) list`)
-    ok || (failure(settings, check_name, "The public API of $(from_label) couldn't be listed:\n$(last(errors, 2000))"); return String[])
+    ok || (failure(settings, check_name, "The public API of $(from_label) couldn't be listed:\n$(error_message(errors))"); return String[])
     write(listing, output)
     ok, output, errors = julia_in(to, `$(SURFACE) $(name) against $(listing)`)
-    ok || (failure(settings, check_name, "The public API of $(to_label) couldn't be compared:\n$(last(errors, 2000))"); return String[])
+    ok || (failure(settings, check_name, "The public API of $(to_label) couldn't be compared:\n$(error_message(errors))"); return String[])
     return filter(!isempty, split(output, '\n'))
 end
 
@@ -99,7 +111,8 @@ end
 # The checkout is of the whole repository, so that tests that read the files around a package in a subdirectory still find them.
 function old_tests(settings::Settings, release_checkout)
     release_directory = package_directory(settings, release_checkout)
-    isdir(joinpath(release_directory, "test")) || return true, "the base has no tests"
+    isdir(joinpath(release_directory, "test")) || return true, String[]
+    install_registry(settings)
     return with_checkout(settings, "HEAD") do head_checkout
         directory = package_directory(settings, head_checkout)
         test_directory = joinpath(directory, "test")
