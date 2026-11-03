@@ -6,6 +6,11 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Added
+
+- The back-merge workflow's input `auto-merge` approves and merges a release's back-merge once TagBot has tagged the release at the commit that the back-merge brings, its required checks pass, and it doesn't conflict, on the caller's `workflow_run` of TagBot and of the checks, without GitHub's auto-merge; each run says what each back-merge waits for, and which setting or permission is missing.
+  This repository's own back-merges use it.
+
 ## [1.3.1] - 2026-11-03
 
 ### Fixed

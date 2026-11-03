@@ -35,6 +35,28 @@
 # Without either, the default token opens the pull request, which says to close and reopen it, so that the checks run.
 # Either way, the repository must allow GitHub Actions to create pull requests, in Settings → Actions → General.
 #
+# With `auto-merge: true`, a release's back-merge, from the main branch, merges itself once it's ready: TagBot has tagged the release at the commit that it brings, its required checks pass, and it doesn't conflict.
+# It waits for the tag because its merge commit may have the release's tree, which TagBot could otherwise tag instead of the release's commit.
+# github-actions[bot] approves it, with the job's own token, and the app's token, or RELEASEFLOW_TOKEN, merges it, so that the merge starts the develop branch's workflows; nothing else is merged, and GitHub's auto-merge isn't used.
+# A back-merge becomes ready when TagBot tags the release or when its checks complete, so the caller also runs on those workflows' runs, naming every workflow whose checks the ruleset requires:
+#
+#   on:
+#     push:
+#       branches: [main]
+#     workflow_run:
+#       workflows: [TagBot, Gitflow, Unit tests]
+#       types: [completed]
+#     workflow_dispatch:
+#   jobs:
+#     back-merge:
+#       uses: BioJulia/Workflows/.github/workflows/back-merge.yml@v1
+#       with:
+#         auto-merge: true
+#
+# A `workflow_run` runs on the default branch, so the environment must allow it too.
+# The repository must also allow GitHub Actions to approve pull requests, in the same setting as creating them.
+# Each run reports, in its notices and its job summary, what each back-merge waits for, and which setting or permission to change where one is missing.
+#
 # The job runs in the deployment environment `environment`, `releaseflow` unless given: keep the secrets there, as environment secrets, and limit the environment to the branches that it brings, so that a workflow on any other branch can't read them.
 name: "Reusable: Back-merge"
 
@@ -65,6 +87,10 @@ on:
         description: The deployment environment that holds the secrets, limited to the branches that it brings.
         type: string
         default: releaseflow
+      auto-merge:
+        description: Whether to approve and merge a release's back-merge once TagBot has tagged the release, its checks pass and it doesn't conflict, on the caller's `workflow_run` of TagBot and of the checks.
+        type: boolean
+        default: false
     secrets:
       RELEASEFLOW_APP_CLIENT_ID:
         description: The client ID of a GitHub App, installed on the repository, whose token opens the pull request so that its checks run.
@@ -81,6 +107,8 @@ permissions: {}
 jobs:
   back-merge:
     name: Back-merge
+    # A `workflow_run` concerns a back-merge only if it's TagBot's, which may have tagged a release, or a check's of a back-merge branch; the other pull requests' checks don't start the job.
+    if: ${{ github.event_name != 'workflow_run' || (inputs.auto-merge && (github.event.workflow_run.name == 'TagBot' || startsWith(github.event.workflow_run.head_branch, 'back-merge/'))) }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -109,6 +137,8 @@ jobs:
           client-id: ${{ secrets.RELEASEFLOW_APP_CLIENT_ID }}
           private-key: ${{ secrets.RELEASEFLOW_APP_PRIVATE_KEY }}
       - name: Open the pull request that brings one branch into another
+        # The branch moves by a push, or the job is run by hand; a `workflow_run` only merges.
+        if: ${{ github.event_name != 'workflow_run' }}
         env:
           # The pull request's token: the app's, or the personal one, or the default one, whose pull requests start no workflows.
           GH_TOKEN: ${{ steps.app.outputs.token || secrets.RELEASEFLOW_TOKEN || github.token }}
@@ -181,3 +211,132 @@ jobs:
           It was opened with the default token, which doesn't start workflows, so close and reopen it to run the checks; a GitHub App or the secret RELEASEFLOW_TOKEN avoids this."
           fi
           gh pr create --repo "$REPOSITORY" --head "$branch" --base "$into" --title "$title" --body "$body"
+      # With `auto-merge`, the back-merges of releases merge themselves once they're ready: TagBot has tagged the release, at the commit that the back-merge brings, the required checks pass, and nothing conflicts.
+      # The merge waits for the tag because a back-merge's merge commit may have the release's tree, which TagBot could otherwise tag instead of the release's commit.
+      - name: Merge the back-merges that are ready
+        if: ${{ inputs.auto-merge }}
+        env:
+          # The merge's token: the app's, or the personal one, so that the merge into the develop branch starts its workflows, which a merge with the default token wouldn't.
+          GH_TOKEN: ${{ steps.app.outputs.token || secrets.RELEASEFLOW_TOKEN }}
+          HAS_TOKEN: ${{ steps.app.outputs.token != '' || secrets.RELEASEFLOW_TOKEN != '' }}
+          # The approval's token: the job's own, as github-actions[bot], a reviewer other than the app or the token's owner that opened the pull request.
+          DEFAULT_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          RELEASEFLOW_MAIN_BRANCH: ${{ inputs.main-branch }}
+          RELEASEFLOW_DEVELOP_BRANCH: ${{ inputs.develop-branch }}
+          FROM: ${{ inputs.from }}
+          INTO: ${{ inputs.into }}
+        run: |
+          set -euo pipefail
+          from="${FROM:-$RELEASEFLOW_MAIN_BRANCH}"
+          into="${INTO:-$RELEASEFLOW_DEVELOP_BRANCH}"
+          # Each outcome is a notice on the run, and a line of the job's summary; a failure is an error, and fails the step once every back-merge is handled.
+          summary="${GITHUB_STEP_SUMMARY:-/dev/null}"
+          echo "## Back-merges" >> "$summary"
+          report() {
+            echo "::notice title=Back-merge::$1"
+            echo "- $1" >> "$summary"
+          }
+          failed=false
+          fail() {
+            echo "::error title=Back-merge::$1"
+            echo "- $1" >> "$summary"
+            failed=true
+          }
+
+          # Only a release's back-merge, from the main branch, is named after the version whose tag it waits for.
+          if [ "$from" != "$RELEASEFLOW_MAIN_BRANCH" ]; then
+            report "Only the back-merges of releases, from $RELEASEFLOW_MAIN_BRANCH, merge themselves; merge the one from $from by hand."
+            exit 0
+          fi
+          if [ "$HAS_TOKEN" != "true" ]; then
+            fail "Merging a back-merge needs the ReleaseFlow app's secrets, RELEASEFLOW_APP_CLIENT_ID and RELEASEFLOW_APP_PRIVATE_KEY, or RELEASEFLOW_TOKEN, in the environment of the job, so that the merge starts the workflows of $into; see BioJulia/Workflows' README, Creating the ReleaseFlow app."
+            exit 1
+          fi
+
+          # The open back-merges of releases into the develop branch: their number, branch and head commit.
+          back_merges=$(GH_TOKEN="$DEFAULT_TOKEN" gh pr list --repo "$REPOSITORY" --base "$into" --state open --json number,headRefName,headRefOid \
+            --jq '.[] | select(.headRefName | test("^back-merge/v[0-9]+\\.[0-9]+\\.[0-9]+$")) | "\(.number) \(.headRefName) \(.headRefOid)"')
+          if [ -z "$back_merges" ]; then
+            report "There's no open back-merge of a release into $into."
+            exit 0
+          fi
+
+          # The list comes on its own descriptor, so that nothing in the loop reads it.
+          while read -r number branch head <&3; do
+            version="${branch#back-merge/}"
+            name="#$number, $branch"
+            # The tag, which TagBot makes once the registry merges the release.
+            if ! git ls-remote --exit-code --tags origin "refs/tags/$version" > /dev/null; then
+              report "$name waits for TagBot to tag $version."
+              continue
+            fi
+            git fetch -q --force origin "+refs/tags/$version:refs/tags/$version" "+refs/heads/$branch:refs/remotes/origin/$branch"
+            tagged=$(git rev-parse "$version^{commit}")
+            # The release's commit is in the back-merge's history, also once a maintainer has merged the develop branch into it to resolve a conflict.
+            if ! git merge-base --is-ancestor "$tagged" "$head"; then
+              fail "$name isn't merged: $version is at ${tagged:0:7}, which the back-merge, at ${head:0:7}, doesn't bring, so TagBot tagged another commit than the release's; move the tag to the release's commit, and run this workflow again."
+              continue
+            fi
+
+            # The approval, once, as github-actions[bot].
+            approved=$(GH_TOKEN="$DEFAULT_TOKEN" gh pr view "$number" --repo "$REPOSITORY" --json latestReviews \
+              --jq '[.latestReviews[] | select((.author.login | startswith("github-actions")) and .state == "APPROVED")] | length')
+            if [ "$approved" = "0" ]; then
+              if message=$(GH_TOKEN="$DEFAULT_TOKEN" gh pr review "$number" --repo "$REPOSITORY" --approve --body "TagBot has tagged $version at ${tagged:0:7}, the release's commit, so this back-merge can merge." 2>&1 > /dev/null); then
+                report "Approved $name, since TagBot has tagged $version at ${tagged:0:7}."
+              elif [[ "$message" == *"not permitted to approve"* || "$message" == *"Can not approve"* ]]; then
+                fail "GitHub Actions couldn't approve $name: turn on Settings → Actions → General → Workflow permissions → Allow GitHub Actions to create and approve pull requests. GitHub said: ${message//$'\n'/ }"
+                continue
+              else
+                fail "GitHub Actions couldn't approve $name: ${message//$'\n'/ }"
+                continue
+              fi
+            fi
+
+            # Whether GitHub would merge it: its state folds in the ruleset's required checks and reviews, and conflicts; GitHub computes it after a change, so it may first be unknown.
+            state=UNKNOWN
+            for _ in 1 2 3 4 5 6; do
+              read -r state decision current < <(GH_TOKEN="$DEFAULT_TOKEN" gh pr view "$number" --repo "$REPOSITORY" --json mergeStateStatus,reviewDecision,headRefOid \
+                --jq '"\(.mergeStateStatus) \(.reviewDecision // "NONE") \(.headRefOid)"')
+              [ "$state" != "UNKNOWN" ] && break
+              sleep "${RELEASEFLOW_RETRY_SECONDS:-5}"
+            done
+            case "$state" in
+              CLEAN | HAS_HOOKS)
+                # The merge only goes ahead at the head that was checked, and GitHub applies the ruleset to it again.
+                if message=$(gh pr merge "$number" --repo "$REPOSITORY" --merge --match-head-commit "$current" 2>&1 > /dev/null); then
+                  report "Merged $name into $into, after TagBot tagged $version at ${tagged:0:7}."
+                elif [[ "$message" == *"Head branch was modified"* ]]; then
+                  report "$name moved while it was being merged; its checks run again, and their completion merges it."
+                elif [[ "$message" == *"Resource not accessible"* || "$message" == *"403"* ]]; then
+                  fail "The token couldn't merge $name: the ReleaseFlow app, or RELEASEFLOW_TOKEN, needs Contents and Pull requests: Read and write on $REPOSITORY. GitHub said: ${message//$'\n'/ }"
+                else
+                  fail "The token couldn't merge $name: ${message//$'\n'/ }"
+                fi
+                ;;
+              DIRTY)
+                report "$name conflicts with $into: merge $into into $branch, resolve the conflicts there, and push; its checks then run again, and their completion merges it."
+                ;;
+              BLOCKED)
+                if [ "$decision" = "REVIEW_REQUIRED" ] || [ "$decision" = "CHANGES_REQUESTED" ]; then
+                  report "$name needs a review that github-actions[bot] can't give, such as a code owner's for changes to /.github/; the reviewer merges it on approving."
+                else
+                  report "$name waits for its required checks; their completion merges it."
+                fi
+                ;;
+              BEHIND)
+                report "$name is behind $into, whose ruleset requires branches to be up to date: merge $into into $branch; its checks then run again, and their completion merges it."
+                ;;
+              UNSTABLE)
+                report "$name has checks that fail, though the ruleset doesn't require them, so it isn't merged by itself: look at them, and merge it by hand."
+                ;;
+              *)
+                report "$name can't be merged yet, as GitHub's state of it is $state; the next completion of its checks, or of TagBot, tries again."
+                ;;
+            esac
+          done 3<<< "$back_merges"
+
+          if [ "$failed" = true ]; then
+            exit 1
+          fi

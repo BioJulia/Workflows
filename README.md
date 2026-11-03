@@ -89,6 +89,40 @@ From the main branch, the pull request's branch is `back-merge/vX.Y.Z`, named af
 The `releaseflow` environment then also allows the branch that it brings.
 Under gitflow, ReleaseFlow's source branch check allows a `back-merge/*` branch only into develop, so a merge into the main branch suits a repository that doesn't require the gitflow checks there.
 
+With `auto-merge: true`, a release's back-merge merges itself once it's ready: TagBot has tagged the release at the commit that the back-merge brings, the required checks pass, and it doesn't conflict.
+It waits for the tag because the back-merge's merge commit may have the release's tree, which TagBot could otherwise tag instead of the release's commit.
+`github-actions[bot]` approves it, with the job's own token, a reviewer other than the app that opened it, and the app's token, or `RELEASEFLOW_TOKEN`, merges it, so that the merge starts `develop`'s workflows.
+Nothing else is merged, and GitHub's auto-merge isn't used, so the repository doesn't need it on.
+A back-merge becomes ready when TagBot tags the release or when its checks complete, so the caller also runs on those workflows' runs, naming TagBot's workflow and every workflow whose checks the ruleset requires:
+
+```yaml
+name: Back-merge
+on:
+  push:
+    branches: [main]
+  workflow_run:
+    workflows: [TagBot, Gitflow, Unit tests]   # TagBot's workflow, and those of the required checks, by their names
+    types: [completed]
+  workflow_dispatch:
+permissions: {}
+jobs:
+  back-merge:
+    uses: BioJulia/Workflows/.github/workflows/back-merge.yml@v1
+    permissions:
+      contents: write
+      pull-requests: write
+    with:
+      auto-merge: true
+    secrets:
+      RELEASEFLOW_APP_CLIENT_ID: ${{ secrets.RELEASEFLOW_APP_CLIENT_ID }}
+      RELEASEFLOW_APP_PRIVATE_KEY: ${{ secrets.RELEASEFLOW_APP_PRIVATE_KEY }}
+      RELEASEFLOW_TOKEN: ${{ secrets.RELEASEFLOW_TOKEN }}
+```
+
+The job skips the runs of other pull requests' checks, so it only starts for TagBot's runs and the back-merges' own.
+A back-merge that needs a review that `github-actions[bot]` can't give, such as a code owner's for a hotfix that changes `/.github/`, waits for it, and the reviewer merges it on approving.
+Each run says, in its notices and its job summary, what each back-merge waits for, and which setting or permission to change where one is missing; [Troubleshooting the back-merge](#troubleshooting-the-back-merge) lists them.
+
 And the dependents' tests, in `.github/workflows/Dependents.yml`, which run the tests of the packages that depend on this one with the pull request's branch in its place:
 
 ```yaml
@@ -243,6 +277,7 @@ A package can follow the major tag, `v1`, or pin a release, such as `v1.0.0`; De
 | `step` | `auto` | release | The step of the version, `auto`, `patch`, `minor` or `major`. |
 | `pin-action` | none | release | An action whose pins in the workflows take the new version, such as `BioJulia/Workflows` for this repository. |
 | `environment` | `releaseflow` | back-merge, release | The deployment environment that holds the secrets. |
+| `auto-merge` | `false` | back-merge | Whether a release's back-merge approves and merges itself once TagBot has tagged the release, its checks pass and it doesn't conflict. |
 
 For example, `with: { main-branch: master }` for a repository whose main branch is `master`.
 
@@ -273,7 +308,7 @@ Any workflow that runs in a repository can read its repository and organization 
 An environment's secrets reach only the jobs on the branches that the environment allows, so the release and back-merge jobs run in the environment that their input `environment` names, `releaseflow`:
 
 1. Open the repository's Settings → Environments, and choose "New environment", named `releaseflow`.
-2. Under "Deployment branches and tags", choose "Selected branches and tags", and add rules for the main branch, such as `master`, where the back-merge runs; the branch that releases are started from in the Actions tab, such as `develop`, the default branch, where the tag workflow runs too; and tags matching `v*`, on which the tag workflow runs, whose ruleset limits who can make them.
+2. Under "Deployment branches and tags", choose "Selected branches and tags", and add rules for the main branch, such as `master`, where the back-merge runs; the branch that releases are started from in the Actions tab, such as `develop`, the default branch, where the tag workflow runs too, and the back-merge with `auto-merge` on TagBot's and the checks' runs; and tags matching `v*`, on which the tag workflow runs, whose ruleset limits who can make them.
 3. Under "Environment secrets", add the ReleaseFlow credentials: `RELEASEFLOW_APP_CLIENT_ID` and `RELEASEFLOW_APP_PRIVATE_KEY` for the app, or `RELEASEFLOW_TOKEN` for a personal access token.
 
 GitHub uses the environment's secrets in place of secrets of the same name that the caller passes, so the caller needs no change.
@@ -328,6 +363,27 @@ GitHub shows the token's owner as the author of the branches and pull requests, 
 5. Under repository permissions, set Contents, Pull requests and Workflows to Read and write, as for the app.
 6. Choose "Generate token", and copy it; GitHub shows it only once.
 7. Store it as an environment secret named `RELEASEFLOW_TOKEN`, in each repository's `releaseflow` environment.
+
+### Troubleshooting the back-merge
+
+Each run of the back-merge says what it did, and what each back-merge waits for, in its notices and in its job summary, under "Back-merges".
+Where a run fails, its message names what to change:
+
+- "Merging a back-merge needs the ReleaseFlow app's secrets": the job has neither the app's secrets nor `RELEASEFLOW_TOKEN`; add them to the `releaseflow` environment, as described in [Creating the ReleaseFlow app](#creating-the-releaseflow-app).
+  The default token's merge wouldn't start `develop`'s workflows, so the back-merge isn't merged with it.
+- "GitHub Actions couldn't approve": turn on Settings → Actions → General → Workflow permissions → "Allow GitHub Actions to create and approve pull requests".
+- "The token couldn't merge … needs Contents and Pull requests: Read and write": give the ReleaseFlow app, or `RELEASEFLOW_TOKEN`, those permissions on the repository.
+- "isn't merged: vX.Y.Z is at …, which the back-merge … doesn't bring": TagBot tagged another commit than the release's; move the tag to the release's commit, and run the back-merge from the Actions tab.
+- "Branch develop is not allowed to deploy to releaseflow due to environment protection rules", before any step runs: a `workflow_run` runs on the default branch, which the `releaseflow` environment must allow, as described in [The ReleaseFlow environment](#the-releaseflow-environment).
+
+And where a back-merge stays open without a failure:
+
+- "waits for TagBot": the registry hasn't merged the release yet, or TagBot hasn't run; TagBot's completion runs the back-merge again.
+- "waits for its required checks": a required check hasn't passed; if it has passed meanwhile, the caller's `workflow_run` doesn't name its workflow, so add it.
+- "needs a review that github-actions[bot] can't give": the ruleset requires a code owner's review, such as for changes to `/.github/`; the reviewer merges it on approving.
+- "conflicts with develop", or "is behind develop": merge `develop` into the back-merge's branch, and push; its checks then run again, and their completion merges it.
+- "has checks that fail, though the ruleset doesn't require them": look at them, and merge it by hand.
+- No run at all after TagBot's: the caller's `workflow_run` must name TagBot's workflow by its `name:`, and the job only follows a workflow named `TagBot`.
 
 ## The checks
 
