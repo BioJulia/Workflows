@@ -6,6 +6,10 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Changed
+
+- The changelog entry check doesn't compare the public API before the initial release, while the main branch has no version, so a pull request into `develop` of a package that has never been released needs a new entry, but not one under `### Breaking` or `### Added`, nor the `skip changelog` label.
+
 ## [1.4.0] - 2026-11-03
 
 ### Added

@@ -57,6 +57,18 @@ initial!(directory, name, from, version; log = changelog(released = [version => 
         # Other tags aren't versions.
         git(directory, "tag", "ReleaseFlow-v0.0.1", start)
         @test passes(on("release/v0.1.0", "version"))
+        # Before the initial release, a change to the public API needs a new entry, but not one of its kind.
+        added = replace(SOURCE, "export double, triple" => "export double, triple, quadruple", "triple(x) = 3x" => "triple(x) = 3x\nquadruple(x) = 4x")
+        branch!(directory, "feature/x", package)
+        commit!(directory, "Work", "src/Toy.jl" => added, "CHANGELOG.md" => changelog(unreleased = ["Toy.", "Quadruple."]))
+        entry(; variables...) = check(directory, "entry"; RELEASEFLOW_BASE_REF = "origin/develop", RELEASEFLOW_HEAD_REF = "feature/x", variables...)
+        result = entry()
+        @test passes(result)
+        @test occursin("origin/master has no version, so the package hasn't been released, and its public API isn't compared", result.output)
+        # Once the main branch has a version, the API is compared.
+        origin!(directory, "master", package)
+        @test fails(entry(), "feature/x adds public API, so CHANGELOG.md needs a new entry under `### Added`")
+        origin!(directory, "master", start)
     end
 
     @testset "OneFlow" begin

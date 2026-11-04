@@ -40,8 +40,14 @@ end
 
 # A change to the public API takes a new entry of its kind under `## [Unreleased]`: one that removes or changes a name, method, keyword or field, an entry under `### Breaking`, and one that adds any, an entry under `### Added`.
 # A change in behaviour with the same API, which the API can't show, is left to the breaking check of the release.
+# Before the initial release, where the main branch has no version, the public API isn't one that users have, so its changes need no entries of their kind.
 function check_api_entries(settings::Settings, parsed, added)
     changes_api(settings) || return
+    main = "origin/$(settings.main_branch)"
+    if version_at(settings, main) === nothing
+        note("$(main) has no version, so the package hasn't been released, and its public API isn't compared.")
+        return
+    end
     name = head_project(settings)["name"]
     head = (package_directory(settings), head_label(settings))
     removed, provided = with_checkout(settings, settings.base_ref) do directory
