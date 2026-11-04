@@ -6,6 +6,8 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-11-03
+
 ### Added
 
 - The back-merge workflow's input `auto-merge` approves and merges a release's back-merge once TagBot has tagged the release at the commit that the back-merge brings, its required checks pass, and it doesn't conflict, on the caller's `workflow_run` of TagBot and of the checks, without GitHub's auto-merge; each run says what each back-merge waits for, and which setting or permission is missing.
@@ -100,7 +102,8 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - The back-merge workflow opens its pull request with a GitHub App's token, from the secrets `RELEASEFLOW_APP_CLIENT_ID` and `RELEASEFLOW_APP_PRIVATE_KEY`, in preference to `RELEASEFLOW_TOKEN`; the README explains how to create the app.
 - The back-merge workflow creates its branch with the job's own token, so the app or personal token needs only read and write access to pull requests; where GitHub refuses the job's token the branch, the other token creates it, with access to contents and workflows.
 
-[Unreleased]: https://github.com/BioJulia/Workflows/compare/v1.3.1...HEAD
+[Unreleased]: https://github.com/BioJulia/Workflows/compare/v1.4.0...HEAD
+[1.4.0]: https://github.com/BioJulia/Workflows/compare/v1.3.1...v1.4.0
 [1.3.1]: https://github.com/BioJulia/Workflows/compare/v1.3.0...v1.3.1
 [1.3.0]: https://github.com/BioJulia/Workflows/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/BioJulia/Workflows/compare/v1.1.1...v1.2.0
